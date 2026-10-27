@@ -143,10 +143,12 @@ export default function OpenGraphImage() {
             </span>
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-            <span style={{ fontSize: "20px", fontWeight: 800, color: "#F2EFE9" }}>
-              TANISH PODDAR
+            <span style={{ fontSize: "19px", fontWeight: 800, color: "#F2EFE9" }}>
+              TANISH PODDAR &amp; KRISH
             </span>
-            <span style={{ fontSize: "13px", color: "#88857E" }}>tanisheesh.in</span>
+            <span style={{ fontSize: "13px", color: "#88857E" }}>
+              tanisheesh.in · @krish-codess
+            </span>
           </div>
         </div>
       </div>
