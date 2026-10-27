@@ -3,94 +3,88 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Network, Activity, Terminal, BookOpen, Github, ArrowRight } from "lucide-react";
 
 export default function Navbar() {
   const pathname = usePathname();
 
   const navLinks = [
-    { href: "/", label: "Overview" },
-    { href: "/dashboard", label: "Live Demo", icon: Activity },
-    { href: "/playground", label: "Proxy Playground", icon: Terminal },
-    { href: "/how-it-works", label: "How It Works", icon: BookOpen },
+    { href: "/", code: "01", label: "SPECIFICATION" },
+    { href: "/dashboard", code: "02", label: "LIVE TELEMETRY" },
+    { href: "/playground", code: "03", label: "HTTP PROBER" },
+    { href: "/how-it-works", code: "04", label: "MATHEMATICS" },
   ];
 
   return (
-    <nav className="sticky top-0 z-50 w-full border-b border-slate-800/80 bg-[#07090e]/90 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-        <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="h-9 w-9 rounded-xl bg-indigo-500/15 border border-indigo-500/40 flex items-center justify-center text-indigo-400 group-hover:border-indigo-400 transition">
-            <Network className="w-5 h-5" />
+    <header className="sticky top-0 z-50 w-full bg-[#080808] border-b border-[#222220]">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-8 h-14 flex items-center justify-between">
+        {/* Brand */}
+        <Link href="/" className="flex items-center gap-3 group">
+          <div className="w-7 h-7 bg-[#ff5500] text-[#080808] font-mono font-bold text-xs flex items-center justify-center tracking-tighter">
+            FL
           </div>
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-base tracking-tight text-white">FuzzLoad</span>
-            <span className="hidden sm:inline-block text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-              v1.0
+          <div className="flex items-baseline gap-2">
+            <span className="font-display font-black text-2xl tracking-tight text-[#f2efe9]">
+              FUZZLOAD
+            </span>
+            <span className="hidden sm:inline font-mono text-[10px] text-[#88857e] tracking-widest">
+              SYS.REV.1.0 // GO+ANFIS+GP
             </span>
           </div>
         </Link>
 
-        <div className="hidden md:flex items-center gap-1">
+        {/* Center Navigation */}
+        <nav className="hidden md:flex items-center h-full">
           {navLinks.map((item) => {
             const active = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                className={`h-14 px-5 flex items-center gap-2 font-mono text-xs tracking-wider border-l border-[#222220] last:border-r transition-colors ${
                   active
-                    ? "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30"
-                    : "text-slate-400 hover:text-white hover:bg-slate-900"
+                    ? "bg-[#151515] text-[#ff5500] border-b-2 border-b-[#ff5500]"
+                    : "text-[#88857e] hover:text-[#f2efe9] hover:bg-[#0e0e0e]"
                 }`}
               >
-                {item.icon && <item.icon className="w-3.5 h-3.5" />}
-                {item.label}
+                <span className="text-[10px] text-[#4a4843]">[{item.code}]</span>
+                <span>{item.label}</span>
               </Link>
             );
           })}
-        </div>
+        </nav>
 
-        <div className="flex items-center gap-2.5">
+        {/* Right Actions */}
+        <div className="flex items-center gap-3">
           <a
             href="https://github.com/tanisheesh/FuzzLoad"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 transition"
+            className="font-mono text-xs text-[#88857e] hover:text-[#f2efe9] px-3 py-1.5 border border-[#222220] hover:border-[#88857e] transition"
           >
-            <Github className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">GitHub</span>
+            SRC ↗
           </a>
-
           {pathname !== "/dashboard" ? (
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm shadow-indigo-500/20 transition"
-            >
-              <span>Launch Demo</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+            <Link href="/dashboard" className="brutal-btn brutal-btn-primary !py-2 !px-4">
+              OPEN CONSOLE →
             </Link>
           ) : (
-            <Link
-              href="/playground"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition"
-            >
-              <Terminal className="w-3.5 h-3.5" />
-              <span>BYO Endpoints</span>
+            <Link href="/playground" className="brutal-btn !py-2 !px-4 !border-[#00e676] !text-[#00e676]">
+              PROBE URL →
             </Link>
           )}
         </div>
       </div>
 
-      {/* Mobile Sub-nav */}
-      <div className="flex md:hidden items-center justify-around border-t border-slate-800/80 bg-slate-950/90 px-2 py-1.5">
+      {/* Mobile Bar */}
+      <div className="grid grid-cols-4 md:hidden border-t border-[#222220] bg-[#0b0b0b]">
         {navLinks.map((item) => {
           const active = pathname === item.href;
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`px-2.5 py-1 rounded text-[11px] font-medium ${
-                active ? "bg-indigo-500/20 text-indigo-300" : "text-slate-400"
+              className={`py-2 text-center font-mono text-[10px] tracking-wider border-r border-[#222220] last:border-r-0 ${
+                active ? "text-[#ff5500] bg-[#151515] font-bold" : "text-[#88857e]"
               }`}
             >
               {item.label}
@@ -98,6 +92,6 @@ export default function Navbar() {
           );
         })}
       </div>
-    </nav>
+    </header>
   );
 }

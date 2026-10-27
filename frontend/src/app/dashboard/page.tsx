@@ -4,23 +4,6 @@ import React, { useEffect, useState, useCallback } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import {
-  Activity,
-  Brain,
-  Cpu,
-  Download,
-  FileCode2,
-  Flame,
-  GitBranch,
-  Gauge,
-  Layers,
-  Play,
-  RefreshCw,
-  Server,
-  ShieldAlert,
-  Sparkles,
-  Zap,
-} from "lucide-react";
-import {
   Area,
   AreaChart,
   Bar,
@@ -45,37 +28,35 @@ import {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const ALGORITHMS = [
-  { id: "fuzzload", label: "FuzzLoad (GP + ANFIS)", badge: "AI Hybrid" },
-  { id: "anfis_only", label: "ANFIS Neuro-Fuzzy Only", badge: "5-Layer NN" },
-  { id: "weighted_round_robin", label: "Weighted Round Robin", badge: "Static Cap" },
-  { id: "least_connections", label: "Least Connections", badge: "Heuristic" },
-  { id: "round_robin", label: "Round Robin", badge: "Baseline" },
+  { id: "fuzzload", label: "FUZZLOAD (GP + ANFIS)" },
+  { id: "anfis_only", label: "ANFIS NEURO-FUZZY ONLY" },
+  { id: "weighted_round_robin", label: "WEIGHTED ROUND ROBIN" },
+  { id: "least_connections", label: "LEAST CONNECTIONS" },
+  { id: "round_robin", label: "ROUND ROBIN (STATIC)" },
 ];
 
 const TRAFFIC_PROFILES = [
-  { id: "sine_wave", label: "Sine Wave Workload" },
-  { id: "steady", label: "Steady Load" },
-  { id: "flash_crowd", label: "Flash Crowd Spike" },
-  { id: "chaos_burst", label: "Chaos Burst" },
+  { id: "sine_wave", label: "SINE WAVE WORKLOAD" },
+  { id: "steady", label: "STEADY LOAD" },
+  { id: "flash_crowd", label: "FLASH CROWD SPIKE" },
+  { id: "chaos_burst", label: "CHAOS BURST" },
 ];
 
 function ASTTreeVisualizer({ node, depth = 0 }: { node: GPASTNode; depth?: number }) {
-  const badgeColor =
+  const borderStyle =
     node.type === "operator"
-      ? "bg-indigo-500/20 border-indigo-400/50 text-indigo-200"
+      ? "border-[#ff5500] text-[#ff5500] bg-[#151515]"
       : node.type === "variable"
-      ? "bg-emerald-500/20 border-emerald-400/50 text-emerald-200"
-      : "bg-amber-500/20 border-amber-400/50 text-amber-200";
+      ? "border-[#00e676] text-[#00e676] bg-[#0b0b0b]"
+      : "border-[#ffb300] text-[#ffb300] bg-[#0b0b0b]";
 
   return (
     <div className="flex flex-col items-center">
-      <div
-        className={`px-2.5 py-1 rounded-md border text-xs font-mono font-semibold shadow-sm ${badgeColor}`}
-      >
+      <div className={`px-2.5 py-1 border text-xs font-mono font-bold ${borderStyle}`}>
         {node.label}
       </div>
       {node.children && node.children.length > 0 && (
-        <div className="flex items-start gap-3 mt-3 pt-2 border-t border-slate-700/80 relative">
+        <div className="flex items-start gap-3 mt-3 pt-2 border-t border-[#3a3834] relative">
           {node.children.map((child, idx) => (
             <ASTTreeVisualizer key={`${child.label}-${idx}-${depth}`} node={child} depth={depth + 1} />
           ))}
@@ -127,7 +108,7 @@ export default function LiveDemoDashboardPage() {
         });
         if (res.ok) setState(await res.json());
       } catch {
-        // Fallback already updated
+        // Fallback updated
       }
     }
   };
@@ -146,7 +127,7 @@ export default function LiveDemoDashboardPage() {
         });
         if (res.ok) setState(await res.json());
       } catch {
-        // Fallback already updated
+        // Fallback updated
       }
     }
   };
@@ -217,7 +198,7 @@ export default function LiveDemoDashboardPage() {
     a.href = url;
     a.download = `fuzzload-benchmark-gen${state.gp.generation}.csv`;
     a.click();
-    setExportBanner("Downloaded Benchmark CSV!");
+    setExportBanner("EXPORTED CSV");
     setTimeout(() => setExportBanner(null), 2500);
   };
 
@@ -240,7 +221,7 @@ export default function LiveDemoDashboardPage() {
       "\\end{table}",
     ].join("\n");
     navigator.clipboard.writeText(lines);
-    setExportBanner("Copied IEEE LaTeX Table to Clipboard!");
+    setExportBanner("COPIED IEEE LATEX TABLE");
     setTimeout(() => setExportBanner(null), 2500);
   };
 
@@ -250,146 +231,113 @@ export default function LiveDemoDashboardPage() {
       100
   );
 
-  // Deterministic AI SRE Telemetry Narrator
   const degradedNodes = state.nodes.filter((n) => n.status !== "healthy");
   const topNode = [...state.nodes].sort((a, b) => b.routing_weight - a.routing_weight)[0];
   const sreNarrative =
     degradedNodes.length > 0
-      ? `ANFIS Anomaly Response Active: Detected fault on ${degradedNodes
-          .map((n) => `${n.name} (P95=${n.p95_latency_ms.toFixed(0)}ms)`)
-          .join(", ")}. Takagi-Sugeno Rule #6 & #12 fired online backpropagation, draining faulty node routing share to ${(
+      ? `[FAULT DETECTED] ${degradedNodes
+          .map((n) => `${n.name} P95=${n.p95_latency_ms.toFixed(0)}ms`)
+          .join(", ")}. ANFIS Rule #6 & #12 triggered online gradient step -> drained faulty node weight to ${(
           degradedNodes[0].routing_weight * 100
-        ).toFixed(1)}% and shifting ${Math.round(
-          topNode.routing_weight * 100
-        )}% capacity to ${topNode.name}.`
-      : `Cluster Optimal: All 4 heterogeneous nodes healthy at ${state.current_rps} RPS. ${topNode.name} carries ${Math.round(
-          topNode.routing_weight * 100
-        )}% load via hybrid ANFIS (Epoch #${state.anfis.epoch}) + GP (Gen #${
-          state.gp.generation
-        }), holding P95 tail latency at ${state.summary.active_p95_ms.toFixed(1)}ms (-${p95SavingPct}% vs Round Robin).`;
+        ).toFixed(1)}% and routed ${Math.round(topNode.routing_weight * 100)}% load to ${topNode.name}.`
+      : `[NOMINAL] All 4 heterogeneous nodes within SLA at ${state.current_rps} RPS. ${
+          topNode.name
+        } carries ${Math.round(topNode.routing_weight * 100)}% share via ANFIS Epoch #${
+          state.anfis.epoch
+        } + GP Gen #${state.gp.generation}. Cluster P95 = ${state.summary.active_p95_ms.toFixed(
+          1
+        )}ms (-${p95SavingPct}% vs Round Robin).`;
 
   return (
-    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col">
+    <div className="min-h-screen flex flex-col">
       <Navbar />
 
-      {/* Sub-Header Command Bar */}
-      <div className="border-b border-slate-800/80 bg-slate-950/70">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span
-              className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border ${
-                backendLive
-                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                  : "bg-indigo-500/15 text-indigo-300 border-indigo-500/30"
-              }`}
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
-              {backendLive ? "Go + Python Control Plane Live" : "Browser Digital Twin Active (500ms Loop)"}
+      {/* COMMAND BAR */}
+      <div className="border-b border-[#222220] bg-[#0b0b0b]">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-8 py-3 flex flex-wrap items-center justify-between gap-3 font-mono text-xs">
+          <div className="flex items-center gap-3">
+            <span className="px-2.5 py-1 border border-[#00e676] text-[#00e676] text-[11px] font-bold">
+              ● {backendLive ? "DAEMON: CONNECTED (:8000)" : "ENGINE: DIGITAL TWIN (500ms)"}
             </span>
-
             {exportBanner && (
-              <span className="text-xs font-medium text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 rounded-lg">
+              <span className="px-2.5 py-1 bg-[#ff5500] text-[#080808] font-bold text-[11px]">
                 {exportBanner}
               </span>
             )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5">
-              <Layers className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="text-xs text-slate-400">Policy:</span>
+            <div className="flex items-center border border-[#3a3834] bg-[#111111] px-2.5 py-1.5">
+              <span className="text-[#88857e] mr-2">POLICY:</span>
               <select
                 aria-label="Routing Policy"
                 value={state.algorithm}
                 onChange={(e) => handleAlgorithmChange(e.target.value)}
-                className="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer"
+                className="bg-transparent text-[#f2efe9] font-bold focus:outline-none cursor-pointer"
               >
                 {ALGORITHMS.map((a) => (
-                  <option key={a.id} value={a.id} className="bg-slate-900 text-white">
+                  <option key={a.id} value={a.id} className="bg-[#0e0e0e] text-[#f2efe9]">
                     {a.label}
                   </option>
                 ))}
               </select>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5">
-              <Activity className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-xs text-slate-400">Workload:</span>
+            <div className="flex items-center border border-[#3a3834] bg-[#111111] px-2.5 py-1.5">
+              <span className="text-[#88857e] mr-2">LOAD:</span>
               <select
                 aria-label="Traffic Profile"
                 value={state.traffic_profile}
                 onChange={(e) => handleTrafficChange(e.target.value)}
-                className="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer"
+                className="bg-transparent text-[#f2efe9] font-bold focus:outline-none cursor-pointer"
               >
                 {TRAFFIC_PROFILES.map((p) => (
-                  <option key={p.id} value={p.id} className="bg-slate-900 text-white">
+                  <option key={p.id} value={p.id} className="bg-[#0e0e0e] text-[#f2efe9]">
                     {p.label}
                   </option>
                 ))}
               </select>
             </div>
 
-            <button
-              onClick={handleEvolveGP}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              Evolve GP (+5 Gen)
+            <button onClick={handleEvolveGP} className="brutal-btn brutal-btn-primary !py-1.5 !px-3">
+              + EVOLVE GP (5 GEN)
             </button>
-
-            <button
-              onClick={handleExportCSV}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition cursor-pointer"
-              title="Export Benchmark CSV"
-            >
-              <Download className="w-3.5 h-3.5 text-cyan-400" />
+            <button onClick={handleExportCSV} className="brutal-btn !py-1.5 !px-3">
               CSV
             </button>
-
-            <button
-              onClick={handleCopyLatex}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition cursor-pointer"
-              title="Copy IEEE Research Paper LaTeX Table"
-            >
-              <FileCode2 className="w-3.5 h-3.5 text-violet-400" />
-              LaTeX
+            <button onClick={handleCopyLatex} className="brutal-btn !py-1.5 !px-3">
+              LATEX
             </button>
-
             <button
               onClick={() => setIsPaused((p) => !p)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition cursor-pointer"
+              className="brutal-btn !py-1.5 !px-3"
             >
-              {isPaused ? <Play className="w-3.5 h-3.5 text-emerald-400" /> : <RefreshCw className="w-3.5 h-3.5" />}
-              {isPaused ? "Resume" : "2Hz"}
+              {isPaused ? "▶ RESUME" : "❚❚ PAUSE"}
             </button>
           </div>
         </div>
       </div>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 pt-6 space-y-6">
-        {/* AI SRE Decision Narrator Banner */}
+      <main className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-8 pt-6 space-y-6">
+        {/* TELEMETRY NARRATOR */}
         <div
-          className={`rounded-xl border px-4 py-3 text-xs flex items-start sm:items-center justify-between gap-3 ${
+          className={`border p-3.5 font-mono text-xs flex items-center justify-between gap-4 ${
             degradedNodes.length > 0
-              ? "bg-amber-950/25 border-amber-500/40 text-amber-200"
-              : "bg-indigo-950/25 border-indigo-500/30 text-indigo-200"
+              ? "border-[#ffb300] bg-[#ffb300]/10 text-[#ffb300]"
+              : "border-[#222220] bg-[#0e0e0e] text-[#f2efe9]"
           }`}
         >
-          <div className="flex items-start sm:items-center gap-2.5">
-            <Brain className="w-4 h-4 shrink-0 mt-0.5 sm:mt-0 text-indigo-400" />
-            <span className="leading-relaxed">{sreNarrative}</span>
-          </div>
-          <span className="text-[11px] font-mono opacity-75 shrink-0">Tick #{state.tick}</span>
+          <span>{sreNarrative}</span>
+          <span className="text-[#88857e] shrink-0">TICK #{state.tick}</span>
         </div>
 
-        {/* Top KPI Metric Cards */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="rounded-xl bg-slate-900/70 border border-slate-800/90 p-4">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-              <span>Cluster Traffic Rate</span>
-              <Zap className="w-4 h-4 text-amber-400" />
+        {/* 5 KPI BLOCKS */}
+        <section className="grid grid-cols-2 lg:grid-cols-5 border border-[#222220] bg-[#0e0e0e]">
+          <div className="p-4 border-b lg:border-b-0 border-r border-[#222220]">
+            <div className="font-mono text-[10px] text-[#88857e] uppercase">INGRESS TRAFFIC</div>
+            <div className="font-display font-black text-4xl text-[#f2efe9] mt-1">
+              {state.current_rps} RPS
             </div>
-            <div className="text-2xl font-bold text-white font-mono">{state.current_rps} RPS</div>
             <div className="mt-2 flex items-center gap-2">
               <input
                 type="range"
@@ -398,206 +346,179 @@ export default function LiveDemoDashboardPage() {
                 step={20}
                 value={state.base_rps}
                 onChange={(e) => handleTrafficChange(state.traffic_profile, Number(e.target.value))}
-                className="w-full accent-indigo-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                className="w-full accent-[#ff5500] cursor-pointer"
               />
-              <span className="text-[11px] font-mono text-slate-400">{state.base_rps}</span>
+              <span className="font-mono text-[10px] text-[#88857e]">{state.base_rps}</span>
             </div>
           </div>
 
-          <div className="rounded-xl bg-slate-900/70 border border-slate-800/90 p-4">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-              <span>Active P95 Tail Latency</span>
-              <Gauge className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div className="text-2xl font-bold text-white font-mono">
+          <div className="p-4 border-b lg:border-b-0 lg:border-r border-[#222220]">
+            <div className="font-mono text-[10px] text-[#88857e] uppercase">CLUSTER P95 LATENCY</div>
+            <div className="font-display font-black text-4xl text-[#00e676] mt-1">
               {state.summary.active_p95_ms.toFixed(1)} ms
             </div>
-            <div className="mt-1 text-xs text-emerald-400 font-medium">
-              {p95SavingPct > 0 ? `↓ ${p95SavingPct}% lower than Round Robin` : "Baseline comparison active"}
+            <div className="font-mono text-[11px] text-[#88857e] mt-1">
+              {p95SavingPct > 0 ? `-${p95SavingPct}% VS ROUND ROBIN` : "BASELINE ACTIVE"}
             </div>
           </div>
 
-          <div className="rounded-xl bg-slate-900/70 border border-slate-800/90 p-4">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-              <span>ANFIS Neuro-Fuzzy Loop</span>
-              <Brain className="w-4 h-4 text-violet-400" />
+          <div className="p-4 border-b sm:border-b-0 border-r border-[#222220]">
+            <div className="font-mono text-[10px] text-[#88857e] uppercase">ANFIS FAST LOOP</div>
+            <div className="font-display font-black text-4xl text-[#f2efe9] mt-1">
+              EPOCH #{state.anfis.epoch}
             </div>
-            <div className="text-2xl font-bold text-white font-mono">Epoch #{state.anfis.epoch}</div>
-            <div className="mt-1 text-xs text-slate-400 font-mono">
-              Online MSE Loss: <span className="text-violet-300">{state.anfis.current_loss.toFixed(4)}</span>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-slate-900/70 border border-slate-800/90 p-4">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-              <span>Genetic Programming</span>
-              <GitBranch className="w-4 h-4 text-indigo-400" />
-            </div>
-            <div className="text-2xl font-bold text-white font-mono">Gen #{state.gp.generation}</div>
-            <div className="mt-1 text-xs text-slate-400 font-mono">
-              Elite Fitness: <span className="text-indigo-300">{(state.gp.best_fitness * 100).toFixed(1)}%</span>
+            <div className="font-mono text-[11px] text-[#ff5500] mt-1">
+              MSE LOSS: {state.anfis.current_loss.toFixed(4)}
             </div>
           </div>
 
-          <div className="rounded-xl bg-slate-900/70 border border-slate-800/90 p-4">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-              <span>Jain&apos;s Fairness Index</span>
-              <Cpu className="w-4 h-4 text-cyan-400" />
+          <div className="p-4 border-r border-[#222220]">
+            <div className="font-mono text-[10px] text-[#88857e] uppercase">GP SYMBOLIC LOOP</div>
+            <div className="font-display font-black text-4xl text-[#f2efe9] mt-1">
+              GEN #{state.gp.generation}
             </div>
-            <div className="text-2xl font-bold text-white font-mono">
+            <div className="font-mono text-[11px] text-[#00e676] mt-1">
+              FITNESS: {(state.gp.best_fitness * 100).toFixed(1)}%
+            </div>
+          </div>
+
+          <div className="p-4 col-span-2 lg:col-span-1">
+            <div className="font-mono text-[10px] text-[#88857e] uppercase">JAIN&apos;S FAIRNESS</div>
+            <div className="font-display font-black text-4xl text-[#f2efe9] mt-1">
               {state.summary.jains_fairness.toFixed(3)}
             </div>
-            <div className="mt-1 text-xs text-slate-400">Capacity-normalized load balance</div>
+            <div className="font-mono text-[11px] text-[#88857e] mt-1">
+              CAPACITY-WEIGHTED INDEX
+            </div>
           </div>
         </section>
 
-        {/* Live Heterogeneous Server Cluster Topology & Chaos Fault Injection */}
-        <section className="rounded-2xl bg-slate-900/60 border border-slate-800/90 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-            <div>
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <Server className="w-4 h-4 text-indigo-400" />
-                Heterogeneous Worker Cluster &amp; Chaos Fault Injection
-              </h2>
-              <p className="text-xs text-slate-400">
-                Click any fault button (`CPU Spike`, `I/O Lag`, `Offline`) on a server below to watch ANFIS + GP drain its traffic weight in real time.
-              </p>
-            </div>
-            <div className="text-xs font-mono text-slate-400">
-              Hybrid Blending: <span className="text-indigo-300">λ = {state.blending_lambda} ANFIS</span> +{" "}
-              <span className="text-emerald-300">{(1 - state.blending_lambda).toFixed(2)} GP</span>
-            </div>
+        {/* 4 HETEROGENEOUS SERVER NODES + CHAOS MATRIX */}
+        <section className="panel-frame">
+          <div className="panel-header">
+            <span>HETEROGENEOUS WORKER POOL // CHAOS FAULT INJECTION MATRIX</span>
+            <span>BLENDING: λ={state.blending_lambda} ANFIS + {(1 - state.blending_lambda).toFixed(2)} GP</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-[#222220]">
             {state.nodes.map((node) => {
               const weightPct = Math.round(node.routing_weight * 100);
               const isDegraded = node.status === "degraded";
               const isOffline = node.status === "offline";
-              const borderClass = isOffline
-                ? "border-rose-500/60 bg-rose-950/15"
-                : isDegraded
-                ? "border-amber-500/60 bg-amber-950/15"
-                : "border-slate-800 bg-slate-950/60";
 
               return (
-                <div
-                  key={node.node_id}
-                  className={`rounded-xl border p-4 transition-all flex flex-col justify-between ${borderClass}`}
-                >
+                <div key={node.node_id} className="p-5 flex flex-col justify-between bg-[#0e0e0e]">
                   <div>
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-start justify-between gap-2 mb-3">
                       <div>
-                        <h3 className="text-sm font-bold text-white">{node.name}</h3>
-                        <span className="text-[11px] font-mono text-slate-400">
-                          127.0.0.1:{node.port} · {node.capacity_cores} vCPU · {node.memory_gb}GB
-                        </span>
+                        <div className="font-mono font-bold text-sm text-[#f2efe9]">{node.name}</div>
+                        <div className="font-mono text-[11px] text-[#88857e]">
+                          :{node.port} · {node.capacity_cores}vCPU · {node.memory_gb}GB
+                        </div>
                       </div>
                       <span
-                        className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-full border ${
+                        className={`font-mono text-[10px] uppercase px-2 py-0.5 border font-bold ${
                           isOffline
-                            ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                            ? "border-[#ff2a2a] text-[#ff2a2a]"
                             : isDegraded
-                            ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                            : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                            ? "border-[#ffb300] text-[#ffb300]"
+                            : "border-[#00e676] text-[#00e676]"
                         }`}
                       >
                         {node.status}
                       </span>
                     </div>
 
-                    <div className="mt-3.5">
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-slate-400 font-medium">Routing Share (P_i)</span>
-                        <span className="font-mono font-bold text-indigo-300 text-sm">{weightPct}%</span>
+                    {/* Weight Bar */}
+                    <div className="my-4">
+                      <div className="flex items-center justify-between font-mono text-xs mb-1.5">
+                        <span className="text-[#88857e]">ROUTING SHARE (P_i)</span>
+                        <span className="text-lg font-bold text-[#ff5500]">{weightPct}%</span>
                       </div>
-                      <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="w-full h-3 bg-[#1a1a18] border border-[#222220]">
                         <div
-                          className="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 transition-all duration-300"
+                          className={`h-full transition-all duration-300 ${
+                            isOffline
+                              ? "bg-[#ff2a2a]"
+                              : isDegraded
+                              ? "bg-[#ffb300]"
+                              : "bg-[#ff5500]"
+                          }`}
                           style={{ width: `${Math.min(100, weightPct)}%` }}
                         />
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 mt-3.5 pt-3 border-t border-slate-800/80 text-xs">
+                    {/* Telemetry Grid */}
+                    <div className="grid grid-cols-2 gap-2.5 pt-3 border-t border-[#222220] font-mono text-xs">
                       <div>
-                        <span className="text-slate-400 block text-[11px]">CPU / RAM</span>
-                        <span className="font-mono font-semibold text-slate-200">
+                        <span className="text-[10px] text-[#88857e] block">CPU / MEM</span>
+                        <span className="text-[#f2efe9] font-bold">
                           {Math.round(node.cpu_usage * 100)}% / {Math.round(node.mem_usage * 100)}%
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-400 block text-[11px]">P95 Latency</span>
-                        <span
-                          className={`font-mono font-semibold ${
-                            node.p95_latency_ms > 90 ? "text-amber-300" : "text-emerald-300"
-                          }`}
-                        >
+                        <span className="text-[10px] text-[#88857e] block">P95 LATENCY</span>
+                        <span className={node.p95_latency_ms > 90 ? "text-[#ffb300] font-bold" : "text-[#00e676] font-bold"}>
                           {node.p95_latency_ms.toFixed(1)} ms
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-400 block text-[11px]">ANFIS / GP Score</span>
-                        <span className="font-mono text-indigo-300">
+                        <span className="text-[10px] text-[#88857e] block">ANFIS / GP</span>
+                        <span className="text-[#f2efe9]">
                           {node.anfis_score.toFixed(0)} / {node.gp_score.toFixed(0)}
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-400 block text-[11px]">Active Conns</span>
-                        <span className="font-mono text-slate-200">{node.active_connections}</span>
+                        <span className="text-[10px] text-[#88857e] block">ACTIVE CONNS</span>
+                        <span className="text-[#f2efe9]">{node.active_connections}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-slate-800/80">
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1.5">
-                      <span className="flex items-center gap-1">
-                        <Flame className="w-3 h-3 text-amber-400" /> Chaos Fault Injection
-                      </span>
-                      {(node.chaos.cpu_spike ||
-                        node.chaos.io_lag ||
-                        node.chaos.mem_leak ||
-                        node.chaos.offline) && (
+                  {/* Fault Buttons */}
+                  <div className="mt-5 pt-3 border-t border-[#222220] font-mono">
+                    <div className="flex items-center justify-between text-[10px] text-[#88857e] mb-2">
+                      <span>INJECT FAULT:</span>
+                      {(node.chaos.cpu_spike || node.chaos.io_lag || node.chaos.offline) && (
                         <button
                           onClick={() => handleChaosToggle(node.node_id, "clear_all", true)}
-                          className="text-[10px] text-indigo-400 hover:underline cursor-pointer"
+                          className="text-[#ff5500] hover:underline cursor-pointer"
                         >
-                          Reset
+                          [RESET]
                         </button>
                       )}
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
                       <button
-                        onClick={() =>
-                          handleChaosToggle(node.node_id, "cpu_spike", !node.chaos.cpu_spike)
-                        }
-                        className={`px-2 py-1 rounded text-[11px] font-medium border transition cursor-pointer ${
+                        onClick={() => handleChaosToggle(node.node_id, "cpu_spike", !node.chaos.cpu_spike)}
+                        className={`py-1.5 text-[10px] font-bold border cursor-pointer ${
                           node.chaos.cpu_spike
-                            ? "bg-amber-500/25 border-amber-400 text-amber-200"
-                            : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+                            ? "bg-[#ffb300] text-[#080808] border-[#ffb300]"
+                            : "bg-[#151515] text-[#88857e] border-[#222220] hover:text-[#f2efe9]"
                         }`}
                       >
-                        CPU Spike
+                        CPU SPIKE
                       </button>
                       <button
                         onClick={() => handleChaosToggle(node.node_id, "io_lag", !node.chaos.io_lag)}
-                        className={`px-2 py-1 rounded text-[11px] font-medium border transition cursor-pointer ${
+                        className={`py-1.5 text-[10px] font-bold border cursor-pointer ${
                           node.chaos.io_lag
-                            ? "bg-amber-500/25 border-amber-400 text-amber-200"
-                            : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+                            ? "bg-[#ffb300] text-[#080808] border-[#ffb300]"
+                            : "bg-[#151515] text-[#88857e] border-[#222220] hover:text-[#f2efe9]"
                         }`}
                       >
-                        I/O Lag
+                        I/O LAG
                       </button>
                       <button
                         onClick={() => handleChaosToggle(node.node_id, "offline", !node.chaos.offline)}
-                        className={`px-2 py-1 rounded text-[11px] font-medium border transition cursor-pointer ${
+                        className={`py-1.5 text-[10px] font-bold border cursor-pointer ${
                           node.chaos.offline
-                            ? "bg-rose-500/25 border-rose-400 text-rose-200"
-                            : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+                            ? "bg-[#ff2a2a] text-[#f2efe9] border-[#ff2a2a]"
+                            : "bg-[#151515] text-[#88857e] border-[#222220] hover:text-[#f2efe9]"
                         }`}
                       >
-                        Offline
+                        KILL NODE
                       </button>
                     </div>
                   </div>
@@ -607,46 +528,33 @@ export default function LiveDemoDashboardPage() {
           </div>
         </section>
 
-        {/* Real-Time Latency Telemetry & ANFIS Membership Curves */}
+        {/* CHARTS ROW 1: P95 LATENCY + ANFIS GAUSSIAN CURVES */}
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-7 rounded-2xl bg-slate-900/60 border border-slate-800/90 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-emerald-400" />
-                  Real-Time P95 Tail Latency: FuzzLoad vs Classical Algorithms
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Evaluated against identical tick-by-tick traffic demands (lower is better)
-                </p>
-              </div>
+          <div className="lg:col-span-7 panel-frame">
+            <div className="panel-header">
+              <span>REALTIME P95 TAIL LATENCY (ms) // FUZZLOAD VS STATIC BASELINES</span>
+              <span>WINDOW: 45 TICKS</span>
             </div>
-            <div className="h-72 w-full">
+            <div className="p-5 h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={state.metrics_history}>
-                  <defs>
-                    <linearGradient id="fuzzGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="timestamp" stroke="#64748b" fontSize={11} />
-                  <YAxis stroke="#64748b" fontSize={11} unit="ms" />
+                  <CartesianGrid strokeDasharray="2 2" stroke="#222220" />
+                  <XAxis dataKey="timestamp" stroke="#88857e" fontSize={10} />
+                  <YAxis stroke="#88857e" fontSize={10} unit="ms" />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#0f172a",
-                      borderColor: "#334155",
-                      borderRadius: "0.5rem",
-                      fontSize: "12px",
+                      backgroundColor: "#0b0b0b",
+                      borderColor: "#3a3834",
+                      fontFamily: "IBM Plex Mono, monospace",
+                      fontSize: "11px",
                     }}
                   />
-                  <Legend wrapperStyle={{ fontSize: "12px" }} />
+                  <Legend wrapperStyle={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "11px" }} />
                   <Area
                     type="monotone"
                     dataKey="round_robin_p95_ms"
-                    name="Round Robin (Static)"
-                    stroke="#f43f5e"
+                    name="ROUND ROBIN"
+                    stroke="#ff2a2a"
                     fill="none"
                     strokeWidth={2}
                     strokeDasharray="4 4"
@@ -655,8 +563,8 @@ export default function LiveDemoDashboardPage() {
                   <Area
                     type="monotone"
                     dataKey="least_conn_p95_ms"
-                    name="Least Connections"
-                    stroke="#f59e0b"
+                    name="LEAST CONNS"
+                    stroke="#ffb300"
                     fill="none"
                     strokeWidth={2}
                     isAnimationActive={false}
@@ -664,9 +572,9 @@ export default function LiveDemoDashboardPage() {
                   <Area
                     type="monotone"
                     dataKey="fuzzload_p95_ms"
-                    name="FuzzLoad (GP + ANFIS)"
-                    stroke="#6366f1"
-                    fill="url(#fuzzGrad)"
+                    name="FUZZLOAD (GP+ANFIS)"
+                    stroke="#00e676"
+                    fill="rgba(0, 230, 118, 0.12)"
                     strokeWidth={2.5}
                     isAnimationActive={false}
                   />
@@ -675,26 +583,18 @@ export default function LiveDemoDashboardPage() {
             </div>
           </div>
 
-          <div className="lg:col-span-5 rounded-2xl bg-slate-900/60 border border-slate-800/90 p-5">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-              <div>
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
-                  <Brain className="w-4 h-4 text-violet-400" />
-                  Layer-1 Fuzzy Gaussian Membership
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Trainable premise parameters (c, σ) tuned via online backprop
-                </p>
-              </div>
-              <div className="flex gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+          <div className="lg:col-span-5 panel-frame flex flex-col justify-between">
+            <div className="panel-header">
+              <span>ANFIS LAYER-1 // GAUSSIAN MEMBERSHIP μ(x)</span>
+              <div className="flex gap-1">
                 {(["cpu", "latency", "memory", "connections"] as const).map((feat) => (
                   <button
                     key={feat}
                     onClick={() => setSelectedFeature(feat)}
-                    className={`px-2 py-0.5 rounded text-[11px] font-mono uppercase cursor-pointer ${
+                    className={`px-2 py-0.5 font-mono text-[10px] uppercase cursor-pointer border ${
                       selectedFeature === feat
-                        ? "bg-indigo-600 text-white"
-                        : "text-slate-400 hover:text-white"
+                        ? "bg-[#ff5500] text-[#080808] border-[#ff5500] font-bold"
+                        : "bg-[#151515] text-[#88857e] border-[#222220]"
                     }`}
                   >
                     {feat.slice(0, 4)}
@@ -703,158 +603,112 @@ export default function LiveDemoDashboardPage() {
               </div>
             </div>
 
-            <div className="h-52 w-full">
+            <div className="p-4 h-56 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={state.anfis.curves[selectedFeature] || []}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="x" stroke="#64748b" fontSize={11} />
-                  <YAxis stroke="#64748b" fontSize={11} domain={[0, 1]} />
+                  <CartesianGrid strokeDasharray="2 2" stroke="#222220" />
+                  <XAxis dataKey="x" stroke="#88857e" fontSize={10} />
+                  <YAxis stroke="#88857e" fontSize={10} domain={[0, 1]} />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#0f172a",
-                      borderColor: "#334155",
-                      borderRadius: "0.5rem",
-                      fontSize: "12px",
+                      backgroundColor: "#0b0b0b",
+                      borderColor: "#3a3834",
+                      fontFamily: "IBM Plex Mono, monospace",
+                      fontSize: "11px",
                     }}
                   />
-                  <Legend wrapperStyle={{ fontSize: "11px" }} />
-                  <Line
-                    type="monotone"
-                    dataKey="low"
-                    name="μ_Low"
-                    stroke="#10b981"
-                    strokeWidth={2}
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="medium"
-                    name="μ_Medium"
-                    stroke="#f59e0b"
-                    strokeWidth={2}
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="high"
-                    name="μ_High"
-                    stroke="#f43f5e"
-                    strokeWidth={2}
-                    dot={false}
-                    isAnimationActive={false}
-                  />
+                  <Legend wrapperStyle={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "10px" }} />
+                  <Line type="monotone" dataKey="low" name="μ_LOW" stroke="#00e676" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="medium" name="μ_MED" stroke="#ffb300" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="high" name="μ_HIGH" stroke="#ff2a2a" strokeWidth={2} dot={false} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
 
-            <div className="mt-3 pt-3 border-t border-slate-800/80 space-y-1.5">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Top Firing Takagi-Sugeno Fuzzy Rules (Layer 2 &amp; 3)
+            <div className="p-4 border-t border-[#222220] font-mono text-[11px] space-y-1.5">
+              <div className="text-[10px] text-[#88857e] uppercase">
+                ACTIVE TAKAGI-SUGENO RULE FIRING STRENGTHS (LAYER 2 &amp; 3)
               </div>
               {state.anfis.rules.slice(0, 3).map((r) => (
-                <div key={r.rule_id} className="flex items-center justify-between text-xs gap-2">
-                  <span className="text-slate-300 truncate font-mono text-[11px]">{r.description}</span>
-                  <span className="font-mono text-indigo-300 shrink-0">
-                    w̄={r.firing_strength.toFixed(3)}
-                  </span>
+                <div key={r.rule_id} className="flex items-center justify-between gap-2">
+                  <span className="text-[#f2efe9] truncate">{r.description}</span>
+                  <span className="text-[#ff5500] font-bold shrink-0">w̄={r.firing_strength.toFixed(3)}</span>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* Genetic Programming Symbolic Tree Inspector & Benchmark Comparison */}
+        {/* CHARTS ROW 2: GP AST TREE + 5-ALGORITHM BENCHMARK */}
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-7 rounded-2xl bg-slate-900/60 border border-slate-800/90 p-5 flex flex-col justify-between">
-            <div>
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                <div>
-                  <h2 className="text-base font-bold text-white flex items-center gap-2">
-                    <GitBranch className="w-4 h-4 text-indigo-400" />
-                    Genetic Programming (GP) Symbolic Expression Tree
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Evolved on 60-second Digital Twin Replay Buffer via Tournament Selection &amp; Subtree Crossover
-                  </p>
-                </div>
-                <span className="text-xs font-mono px-2.5 py-1 rounded-md bg-indigo-500/15 border border-indigo-500/30 text-indigo-300">
-                  Depth: {state.gp.tree_depth} · Nodes: {state.gp.tree_size}
-                </span>
-              </div>
+          <div className="lg:col-span-7 panel-frame flex flex-col justify-between">
+            <div className="panel-header">
+              <span>GENETIC PROGRAMMING // EVOLVED SYMBOLIC SYNTAX TREE (AST)</span>
+              <span>DEPTH: {state.gp.tree_depth} · NODES: {state.gp.tree_size}</span>
+            </div>
 
-              <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 font-mono text-xs text-emerald-300 mb-4 overflow-x-auto">
-                <span className="text-slate-500 select-none">Φ_GP(x) = </span>
+            <div className="p-5 space-y-4">
+              <div className="p-3 border border-[#222220] bg-[#080808] font-mono text-xs text-[#00e676] overflow-x-auto">
+                <span className="text-[#88857e]">Φ_GP(x) = </span>
                 {state.gp.best_formula}
               </div>
 
-              <div className="py-5 px-3 rounded-xl bg-slate-950/50 border border-slate-800/80 overflow-x-auto flex justify-center">
+              <div className="py-6 px-4 border border-[#222220] bg-[#0b0b0b] overflow-x-auto flex justify-center">
                 <ASTTreeVisualizer node={state.gp.ast_tree} />
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center justify-between text-xs text-slate-400 pt-3 border-t border-slate-800/80">
-              <span>Terminals: CPU, MEM, LAT, CONN, ERR, R</span>
-              <span>Primitives: +, -, *, protected_div, min, max, exp, sqrt, sq</span>
+            <div className="px-5 py-3 border-t border-[#222220] font-mono text-[11px] text-[#88857e] flex flex-wrap justify-between">
+              <span>TERMINALS: CPU, MEM, LAT, CONN, ERR, R</span>
+              <span>OPS: +, -, *, DIV, MIN, MAX, EXP, SQRT, SQ</span>
             </div>
           </div>
 
-          <div className="lg:col-span-5 rounded-2xl bg-slate-900/60 border border-slate-800/90 p-5">
-            <h2 className="text-base font-bold text-white flex items-center gap-2 mb-1">
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              Multi-Algorithm Benchmark Comparison
-            </h2>
-            <p className="text-xs text-slate-400 mb-4">
-              P95 &amp; P50 latency (ms) across all 5 policies under heterogeneous burst workload
-            </p>
+          <div className="lg:col-span-5 panel-frame flex flex-col justify-between">
+            <div className="panel-header">
+              <span>COMPARATIVE BENCHMARK SUITE (5 POLICIES)</span>
+              <span>480 RPS TRACE</span>
+            </div>
 
-            <div className="h-56 w-full">
+            <div className="p-4 h-56 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={state.benchmark} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis type="number" stroke="#64748b" fontSize={11} unit="ms" />
-                  <YAxis
-                    type="category"
-                    dataKey="label"
-                    stroke="#94a3b8"
-                    fontSize={11}
-                    width={135}
-                  />
+                  <CartesianGrid strokeDasharray="2 2" stroke="#222220" />
+                  <XAxis type="number" stroke="#88857e" fontSize={10} unit="ms" />
+                  <YAxis type="category" dataKey="label" stroke="#f2efe9" fontSize={10} width={135} />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#0f172a",
-                      borderColor: "#334155",
-                      borderRadius: "0.5rem",
-                      fontSize: "12px",
+                      backgroundColor: "#0b0b0b",
+                      borderColor: "#3a3834",
+                      fontFamily: "IBM Plex Mono, monospace",
+                      fontSize: "11px",
                     }}
                   />
-                  <Legend wrapperStyle={{ fontSize: "11px" }} />
-                  <Bar dataKey="p50_latency_ms" name="P50 Latency (ms)" fill="#38bdf8" radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="p95_latency_ms" name="P95 Tail Latency (ms)" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="p50_latency_ms" name="P50 (ms)" fill="#88857e" />
+                  <Bar dataKey="p95_latency_ms" name="P95 (ms)" fill="#ff5500" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="p-4 border-t border-[#222220] overflow-x-auto">
+              <table className="w-full text-left font-mono text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-800 text-slate-400">
-                    <th className="py-1.5">Algorithm</th>
-                    <th className="py-1.5 font-mono">P95</th>
-                    <th className="py-1.5 font-mono">Err%</th>
-                    <th className="py-1.5 font-mono">Fairness</th>
+                  <tr className="border-b border-[#222220] text-[#88857e] text-[10px]">
+                    <th className="py-1.5">POLICY</th>
+                    <th className="py-1.5">P95</th>
+                    <th className="py-1.5">ERR%</th>
+                    <th className="py-1.5">FAIRNESS</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60 font-mono">
+                <tbody className="divide-y divide-[#222220]">
                   {state.benchmark.map((row) => (
                     <tr
                       key={row.algorithm}
                       className={
-                        row.algorithm === "fuzzload" ? "text-indigo-300 font-semibold" : "text-slate-300"
+                        row.algorithm === "fuzzload" ? "text-[#00e676] font-bold" : "text-[#f2efe9]"
                       }
                     >
-                      <td className="py-1.5 font-sans">{row.label}</td>
+                      <td className="py-1.5">{row.label}</td>
                       <td className="py-1.5">{row.p95_latency_ms}ms</td>
                       <td className="py-1.5">{row.error_rate_pct}%</td>
                       <td className="py-1.5">{row.jains_fairness}</td>

@@ -2,12 +2,122 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
 :root {
-  color-scheme: dark;
+  --bg: #080808;
+  --surface: #0e0e0e;
+  --surface-hi: #151515;
+  --ink: #f2efe9;
+  --muted: #88857e;
+  --dim: #4a4843;
+  --border: #222220;
+  --border-hi: #3a3834;
+  --signal: #ff5500;
+  --signal-dim: rgba(255, 85, 0, 0.14);
+  --ok: #00e676;
+  --warn: #ffb300;
+  --danger: #ff2a2a;
+
+  --font-display: 'Barlow Condensed', Impact, sans-serif;
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  border-radius: 0px;
+}
+
+html {
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
 }
 
 body {
-  background-color: #07090e;
-  color: #f1f5f9;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  margin: 0;
+  min-height: 100dvh;
+  background-color: var(--bg);
+  color: var(--ink);
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.font-sans {
+  font-family: var(--font-sans);
+}
+
+.brutal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 22px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--border-hi);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.1s ease;
+}
+
+.brutal-btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0px var(--signal);
+  border-color: var(--ink);
+}
+
+.brutal-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px var(--signal);
+}
+
+.brutal-btn-primary {
+  background: var(--signal);
+  color: #080808;
+  border: 1px solid var(--signal);
+  font-weight: 700;
+}
+
+.brutal-btn-primary:hover {
+  background: #ff6a1f;
+  box-shadow: 4px 4px 0px var(--ink);
+  border-color: var(--ink);
+}
+
+.panel-frame {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  position: relative;
+}
+
+.panel-header {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #0b0b0b;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }

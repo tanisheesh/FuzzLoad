@@ -1,49 +1,37 @@
 import React from "react";
 import Link from "next/link";
-import { Network } from "lucide-react";
 
 export default function Footer() {
   return (
-    <footer className="border-t border-slate-800/80 bg-[#05070b] text-slate-400 py-10 mt-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-            <Network className="w-4 h-4" />
+    <footer className="border-t border-[#222220] bg-[#080808] text-[#88857e] mt-20">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-8 py-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 font-mono text-xs">
+        <div className="space-y-1">
+          <div className="text-[#f2efe9] font-bold tracking-wider">
+            FUZZLOAD // ADAPTIVE L7 CONTROL PLANE
           </div>
-          <div>
-            <div className="text-sm font-bold text-white">FuzzLoad</div>
-            <div className="text-xs text-slate-500">
-              Adaptive Web Server Load Balancing · Go + 5-Layer ANFIS + Genetic Programming
-            </div>
+          <div className="text-[11px] text-[#88857e]">
+            Built by Tanish Poddar · Go Reverse Proxy + 5-Layer Takagi-Sugeno ANFIS + Symbolic GP
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-5 text-xs">
-          <Link href="/" className="hover:text-white transition">
-            Landing
+        <div className="flex flex-wrap items-center gap-6 text-[11px] uppercase tracking-wider">
+          <Link href="/" className="hover:text-[#ff5500] transition">
+            [01] Spec
           </Link>
-          <Link href="/dashboard" className="hover:text-white transition">
-            Live Demo
+          <Link href="/dashboard" className="hover:text-[#ff5500] transition">
+            [02] Console
           </Link>
-          <Link href="/playground" className="hover:text-white transition">
-            Proxy Playground
+          <Link href="/playground" className="hover:text-[#ff5500] transition">
+            [03] HTTP Prober
           </Link>
-          <Link href="/how-it-works" className="hover:text-white transition">
-            How It Works
+          <Link href="/how-it-works" className="hover:text-[#ff5500] transition">
+            [04] Math
           </Link>
-          <a
-            href="https://tanisheesh.in"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-indigo-400 hover:text-indigo-300 font-medium transition"
-          >
-            tanisheesh.in ↗
-          </a>
           <a
             href="https://github.com/tanisheesh/FuzzLoad"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-white transition"
+            className="text-[#f2efe9] hover:text-[#ff5500] transition"
           >
             GitHub ↗
           </a>

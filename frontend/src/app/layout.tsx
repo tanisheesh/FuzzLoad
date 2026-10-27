@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FuzzLoad — Adaptive Load Balancing via Genetic Programming & Neuro-Fuzzy Control",
+  title: "FUZZLOAD // Adaptive L7 Load Balancer — ANFIS + Genetic Programming",
   description:
-    "Real-time observability & chaos engineering console for FuzzLoad: 5-Layer ANFIS Neuro-Fuzzy Controller + Genetic Programming Symbolic Optimizer + Go Reverse Proxy.",
+    "Lock-free Go Reverse Proxy + 5-Layer Takagi-Sugeno Neuro-Fuzzy Controller + Genetic Programming Symbolic Optimizer.",
 };
 
 export default function RootLayout({
@@ -13,8 +13,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className="min-h-screen bg-[#07090e] text-slate-100 antialiased selection:bg-indigo-500/30 selection:text-indigo-200">
+    <html lang="en">
+      <body className="min-h-screen antialiased selection:bg-[#ff5500] selection:text-black">
         {children}
       </body>
     </html>
