@@ -20,8 +20,11 @@ export const metadata: Metadata = {
   description:
     "Adaptive Web Server Load Balancing Using Genetic Programming and 5-Layer Takagi-Sugeno Neuro-Fuzzy (ANFIS) Control. Lock-free Go Reverse Proxy + Real-Time Chaos Engineering Console.",
   applicationName: "FuzzLoad",
-  authors: [{ name: "Tanish Poddar", url: "https://tanisheesh.in" }],
-  creator: "Tanish Poddar",
+  authors: [
+    { name: "Tanish Poddar", url: "https://tanisheesh.in" },
+    { name: "Krish", url: "https://github.com/krish-codess" },
+  ],
+  creator: "Tanish Poddar & Krish",
   publisher: "Tanish Poddar",
   keywords: [
     "FuzzLoad",
@@ -82,11 +85,18 @@ const jsonLd = {
   operatingSystem: "Linux, Windows, macOS, Docker",
   applicationCategory: "DeveloperApplication",
   url: SITE_URL,
-  author: {
-    "@type": "Person",
-    name: "Tanish Poddar",
-    url: "https://tanisheesh.in",
-  },
+  author: [
+    {
+      "@type": "Person",
+      name: "Tanish Poddar",
+      url: "https://tanisheesh.in",
+    },
+    {
+      "@type": "Person",
+      name: "Krish",
+      url: "https://github.com/krish-codess",
+    },
+  ],
   description:
     "Adaptive Web Server Load Balancing Using Genetic Programming and 5-Layer Takagi-Sugeno Neuro-Fuzzy Control.",
   offers: {
