@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://fuzzload.vercel.app">
+  <a href="https://fuzzload.tanisheesh.in">
     <img src="https://img.shields.io/badge/live_demo-FF5500-FF5500?style=flat-square" alt="Live Demo">
   </a>
   <img src="https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go">
