@@ -1,14 +1,5 @@
 <p align="center">
-  <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24"
-       fill="none" stroke="#FF5500" stroke-width="1.5"
-       stroke-linecap="round" stroke-linejoin="round">
-    <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
-    <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
-    <line x1="6" y1="6" x2="6.01" y2="6"/>
-    <line x1="6" y1="18" x2="6.01" y2="18"/>
-    <path d="M10 6h8"/>
-    <path d="M10 18h8"/>
-  </svg>
+  <img src="docs/logo.svg" width="64" height="64" alt="FuzzLoad logo">
 </p>
 
 <h1 align="center">FuzzLoad</h1>
