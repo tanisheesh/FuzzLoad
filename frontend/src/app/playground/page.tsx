@@ -74,7 +74,7 @@ export default function ProxyPlaygroundPage() {
   const [isProbing, setIsProbing] = useState(false);
   const [copiedConfig, setCopiedConfig] = useState(false);
   const [probeLogs, setProbeLogs] = useState<string[]>([
-    "[PROBER INIT] Paste any public HTTPS URL or API endpoint above and click 'ADD TARGET' to include it in the pool.",
+    "[PROBER INIT] Paste any public HTTPS URL or API endpoint above and click '+ ADD TARGET' to include it in the pool.",
     "[READY] Click 'EXECUTE HTTP BURST' to fire real server-side requests via /api/probe and compute ANFIS + GP routing weights.",
   ]);
 
@@ -179,31 +179,32 @@ export default function ProxyPlaygroundPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col overflow-x-hidden">
       <Navbar />
 
-      <main className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-8 pt-8 space-y-6">
+      <main className="flex-1 max-w-[1400px] w-full mx-auto px-3 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-5 sm:space-y-6">
         {/* HEADER */}
-        <div className="border border-[#222220] bg-[#0e0e0e] p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <div className="font-mono text-xs text-[#ff5500] uppercase tracking-widest mb-2">
+        <div className="border border-[#222220] bg-[#0e0e0e] p-5 sm:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div className="min-w-0">
+            <div className="font-mono text-[11px] sm:text-xs text-[#ff5500] uppercase tracking-widest mb-2">
               // REAL SERVER-SIDE HTTP BENCHMARK &amp; WEIGHT CALCULATOR
             </div>
-            <h1 className="font-display font-black text-4xl sm:text-5xl uppercase text-[#f2efe9]">
+            <h1 className="font-display font-black text-3xl sm:text-4xl lg:text-5xl uppercase text-[#f2efe9]">
               BENCHMARK ANY LIVE URL OR UPSTREAM API
             </h1>
-            <p className="text-sm text-[#88857e] mt-2 max-w-2xl">
+            <p className="text-xs sm:text-sm text-[#88857e] mt-2 max-w-2xl leading-relaxed">
               Enter any live URL or API endpoint below. When you execute a probe burst, the server fires real concurrent HTTP GET requests, measures true P50/P95 response times, and computes exact 5-Layer ANFIS + Genetic Programming routing weights.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0 font-mono">
-            <div className="border border-[#3a3834] bg-[#151515] px-3 py-2.5 text-xs">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0 font-mono">
+            <div className="border border-[#3a3834] bg-[#151515] px-3 py-2.5 text-xs flex items-center justify-between">
               <span className="text-[#88857e] mr-2">BURST:</span>
               <select
+                aria-label="Burst Requests Per URL"
                 value={burstRequests}
                 onChange={(e) => setBurstRequests(Number(e.target.value))}
-                className="bg-transparent font-bold text-[#f2efe9] focus:outline-none"
+                className="bg-transparent font-bold text-[#f2efe9] focus:outline-none cursor-pointer"
               >
                 <option value={2} className="bg-[#0e0e0e]">2 REQS/URL</option>
                 <option value={4} className="bg-[#0e0e0e]">4 REQS/URL</option>
@@ -214,7 +215,7 @@ export default function ProxyPlaygroundPage() {
             <button
               onClick={handleRunLiveBurst}
               disabled={isProbing}
-              className="brutal-btn brutal-btn-primary"
+              className="brutal-btn brutal-btn-primary w-full sm:w-auto"
             >
               {isProbing ? "PROBING UPSTREAMS..." : "▶ EXECUTE HTTP BURST"}
             </button>
@@ -224,10 +225,12 @@ export default function ProxyPlaygroundPage() {
         {/* ADD TARGET FORM */}
         <form
           onSubmit={handleAddUpstream}
-          className="panel-frame p-5 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end font-mono"
+          className="panel-frame p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end font-mono"
         >
           <div className="sm:col-span-3">
-            <label className="block text-[10px] text-[#88857e] uppercase mb-1">NODE ALIAS (OPTIONAL)</label>
+            <label className="block text-[10px] text-[#88857e] uppercase mb-1">
+              NODE ALIAS (OPTIONAL)
+            </label>
             <input
               type="text"
               placeholder="e.g. prod-api-east"
@@ -237,7 +240,9 @@ export default function ProxyPlaygroundPage() {
             />
           </div>
           <div className="sm:col-span-6">
-            <label className="block text-[10px] text-[#88857e] uppercase mb-1">TARGET HTTPS / HTTP URL TO PROBE</label>
+            <label className="block text-[10px] text-[#88857e] uppercase mb-1">
+              TARGET HTTPS / HTTP URL TO PROBE
+            </label>
             <input
               type="url"
               required
@@ -250,6 +255,7 @@ export default function ProxyPlaygroundPage() {
           <div className="sm:col-span-1">
             <label className="block text-[10px] text-[#88857e] uppercase mb-1">CORES</label>
             <select
+              aria-label="CPU Cores"
               value={newCores}
               onChange={(e) => setNewCores(Number(e.target.value))}
               className="w-full bg-[#080808] border border-[#3a3834] px-2 py-2.5 text-xs text-[#f2efe9]"
@@ -268,14 +274,14 @@ export default function ProxyPlaygroundPage() {
         </form>
 
         {/* TARGET POOL + LOGS */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-7 space-y-3">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
+          <div className="lg:col-span-7 space-y-3 min-w-0">
             {upstreams.map((u) => (
-              <div key={u.id} className="panel-frame p-5 space-y-3 font-mono">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
+              <div key={u.id} className="panel-frame p-4 sm:p-5 space-y-3 font-mono">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-3">
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-sm text-[#f2efe9]">{u.name}</span>
+                      <span className="font-bold text-xs sm:text-sm text-[#f2efe9]">{u.name}</span>
                       <span className="text-[10px] px-1.5 py-0.5 border border-[#3a3834] text-[#88857e]">
                         {u.cores}vCPU
                       </span>
@@ -285,11 +291,13 @@ export default function ProxyPlaygroundPage() {
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-[#88857e] mt-1 break-all">{u.url}</div>
+                    <div className="text-[11px] sm:text-xs text-[#88857e] mt-1 break-all">
+                      {u.url}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg font-bold text-[#ff5500]">
+                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-1 sm:pt-0">
+                    <span className="text-base sm:text-lg font-bold text-[#ff5500]">
                       {u.assignedWeightPct}% SHARE
                     </span>
                     <button
@@ -304,20 +312,30 @@ export default function ProxyPlaygroundPage() {
                 <div className="w-full h-2.5 bg-[#151515] border border-[#222220]">
                   <div
                     className={`h-full transition-all duration-300 ${
-                      u.status === "slow" || u.status === "offline" ? "bg-[#ffb300]" : "bg-[#00e676]"
+                      u.status === "slow" || u.status === "offline"
+                        ? "bg-[#ffb300]"
+                        : "bg-[#00e676]"
                     }`}
                     style={{ width: `${u.assignedWeightPct}%` }}
                   />
                 </div>
 
-                <div className="grid grid-cols-4 gap-2 pt-2 border-t border-[#222220] text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t border-[#222220] text-xs">
                   <div>
                     <span className="text-[10px] text-[#88857e] block">P50 LATENCY</span>
-                    <span className="text-[#f2efe9] font-bold">{u.p50LatencyMs ?? u.measuredLatencyMs} ms</span>
+                    <span className="text-[#f2efe9] font-bold">
+                      {u.p50LatencyMs ?? u.measuredLatencyMs} ms
+                    </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-[#88857e] block">P95 LATENCY</span>
-                    <span className={u.measuredLatencyMs > 200 ? "text-[#ffb300] font-bold" : "text-[#00e676] font-bold"}>
+                    <span
+                      className={
+                        u.measuredLatencyMs > 200
+                          ? "text-[#ffb300] font-bold"
+                          : "text-[#00e676] font-bold"
+                      }
+                    >
                       {u.measuredLatencyMs} ms
                     </span>
                   </div>
@@ -334,7 +352,7 @@ export default function ProxyPlaygroundPage() {
             ))}
           </div>
 
-          <div className="lg:col-span-5 space-y-6">
+          <div className="lg:col-span-5 space-y-5 sm:space-y-6 min-w-0">
             <div className="panel-frame">
               <div className="panel-header">
                 <span>GENERATED GATEWAY CLI CONFIG</span>
@@ -345,8 +363,8 @@ export default function ProxyPlaygroundPage() {
                   {copiedConfig ? "[COPIED]" : "[COPY]"}
                 </button>
               </div>
-              <div className="p-4">
-                <pre className="p-3 bg-[#080808] border border-[#222220] font-mono text-xs text-[#00e676] overflow-x-auto leading-relaxed">
+              <div className="p-3.5 sm:p-4">
+                <pre className="p-3 bg-[#080808] border border-[#222220] font-mono text-[11px] sm:text-xs text-[#00e676] overflow-x-auto leading-relaxed">
                   {cliCommand}
                 </pre>
               </div>
@@ -357,9 +375,12 @@ export default function ProxyPlaygroundPage() {
                 <span>SERVER-SIDE HTTP PROBE TELEMETRY LOG</span>
                 <span>/api/probe</span>
               </div>
-              <div className="p-4 font-mono text-[11px] text-[#88857e] space-y-2 max-h-72 overflow-y-auto">
+              <div className="p-3.5 sm:p-4 font-mono text-[11px] text-[#88857e] space-y-2 max-h-72 overflow-y-auto break-words">
                 {probeLogs.map((log, index) => (
-                  <div key={index} className="border-b border-[#222220] pb-1.5 last:border-none text-[#f2efe9]">
+                  <div
+                    key={index}
+                    className="border-b border-[#222220] pb-1.5 last:border-none text-[#f2efe9]"
+                  >
                     {log}
                   </div>
                 ))}
