@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from app.ai_engine.anfis import TakagiSugenoANFIS
 from app.ai_engine.gp_optimizer import GeneticProgrammingOptimizer, protected_div
+from app.cli import FuzzLoadRouter
 from app.cluster.simulator import FuzzLoadClusterController
 
 
@@ -80,11 +81,27 @@ def test_cluster_controller_chaos_and_algorithms() -> None:
     assert by_algo["fuzzload"]["p95_latency_ms"] < by_algo["round_robin"]["p95_latency_ms"]
 
 
+def test_fuzzload_router_sdk() -> None:
+    router = FuzzLoadRouter(
+        upstreams=[
+            {"id": "fast-node", "url": "http://127.0.0.1:4001", "cores": 4.0},
+            {"id": "slow-node", "url": "http://127.0.0.1:4002", "cores": 1.0},
+        ]
+    )
+    weights = router.record_telemetry("slow-node", latency_ms=210.0, cpu=0.92, mem=0.88)
+    router.record_telemetry("fast-node", latency_ms=16.0, cpu=0.18, mem=0.22)
+    weights = router.record_telemetry("slow-node", latency_ms=225.0, cpu=0.95, mem=0.90)
+    assert weights["fast-node"] > weights["slow-node"]
+    chosen = router.select_upstream()
+    assert chosen in ("http://127.0.0.1:4001", "http://127.0.0.1:4002")
+
+
 class FuzzLoadTestSuite(unittest.TestCase):
     def test_all(self) -> None:
         test_anfis_five_layer_forward_and_backprop()
         test_genetic_programming_symbolic_evolution()
         test_cluster_controller_chaos_and_algorithms()
+        test_fuzzload_router_sdk()
 
 
 if __name__ == "__main__":
