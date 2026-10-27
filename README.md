@@ -1,6 +1,6 @@
 <p align="center">
   <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24"
-       fill="none" stroke="#6366F1" stroke-width="1.5"
+       fill="none" stroke="#FF5500" stroke-width="1.5"
        stroke-linecap="round" stroke-linejoin="round">
     <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
     <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
@@ -18,8 +18,8 @@
 </p>
 
 <p align="center">
-  <a href="https://fuzzload.tanisheesh.in">
-    <img src="https://img.shields.io/badge/live_demo-6366F1-6366F1?style=flat-square" alt="Live Demo">
+  <a href="https://fuzzload.vercel.app">
+    <img src="https://img.shields.io/badge/live_demo-FF5500-FF5500?style=flat-square" alt="Live Demo">
   </a>
   <img src="https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go">
   <img src="https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
@@ -29,7 +29,7 @@
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/AWS-232F3E?style=flat-square&logo=amazon-aws&logoColor=white" alt="AWS">
   <img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker">
-  <img src="https://img.shields.io/badge/license-GPL--3.0-6366F1?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/license-GPL--3.0-FF5500?style=flat-square" alt="License">
 </p>
 
 ---
