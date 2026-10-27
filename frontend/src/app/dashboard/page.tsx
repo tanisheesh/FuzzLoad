@@ -51,12 +51,12 @@ function ASTTreeVisualizer({ node, depth = 0 }: { node: GPASTNode; depth?: numbe
       : "border-[#ffb300] text-[#ffb300] bg-[#0b0b0b]";
 
   return (
-    <div className="flex flex-col items-center">
-      <div className={`px-2.5 py-1 border text-xs font-mono font-bold ${borderStyle}`}>
+    <div className="flex flex-col items-center shrink-0">
+      <div className={`px-2 sm:px-2.5 py-1 border text-[11px] sm:text-xs font-mono font-bold ${borderStyle}`}>
         {node.label}
       </div>
       {node.children && node.children.length > 0 && (
-        <div className="flex items-start gap-3 mt-3 pt-2 border-t border-[#3a3834] relative">
+        <div className="flex items-start gap-2 sm:gap-3 mt-2.5 sm:mt-3 pt-2 border-t border-[#3a3834] relative">
           {node.children.map((child, idx) => (
             <ASTTreeVisualizer key={`${child.label}-${idx}-${depth}`} node={child} depth={depth + 1} />
           ))}
@@ -107,9 +107,7 @@ export default function LiveDemoDashboardPage() {
           body: JSON.stringify({ algorithm }),
         });
         if (res.ok) setState(await res.json());
-      } catch {
-        // Fallback updated
-      }
+      } catch {}
     }
   };
 
@@ -126,9 +124,7 @@ export default function LiveDemoDashboardPage() {
           body: JSON.stringify({ profile, base_rps: newRps }),
         });
         if (res.ok) setState(await res.json());
-      } catch {
-        // Fallback updated
-      }
+      } catch {}
     }
   };
 
@@ -162,9 +158,7 @@ export default function LiveDemoDashboardPage() {
           body: JSON.stringify({ node_id: nodeId, fault_type: faultType, enabled }),
         });
         if (res.ok) setState(await res.json());
-      } catch {
-        // Handled locally
-      }
+      } catch {}
     }
   };
 
@@ -178,9 +172,7 @@ export default function LiveDemoDashboardPage() {
           body: JSON.stringify({ generations: 5 }),
         });
         if (res.ok) setState(await res.json());
-      } catch {
-        // Handled locally
-      }
+      } catch {}
     }
   };
 
@@ -249,31 +241,31 @@ export default function LiveDemoDashboardPage() {
         )}ms (-${p95SavingPct}% vs Round Robin).`;
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col overflow-x-hidden">
       <Navbar />
 
       {/* COMMAND BAR */}
       <div className="border-b border-[#222220] bg-[#0b0b0b]">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-8 py-3 flex flex-wrap items-center justify-between gap-3 font-mono text-xs">
-          <div className="flex items-center gap-3">
-            <span className="px-2.5 py-1 border border-[#00e676] text-[#00e676] text-[11px] font-bold">
+        <div className="max-w-[1400px] mx-auto px-3 sm:px-6 lg:px-8 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 font-mono text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-2.5 py-1 border border-[#00e676] text-[#00e676] text-[10px] sm:text-[11px] font-bold">
               ● {backendLive ? "DAEMON: CONNECTED (:8000)" : "ENGINE: DIGITAL TWIN (500ms)"}
             </span>
             {exportBanner && (
-              <span className="px-2.5 py-1 bg-[#ff5500] text-[#080808] font-bold text-[11px]">
+              <span className="px-2.5 py-1 bg-[#ff5500] text-[#080808] font-bold text-[10px] sm:text-[11px]">
                 {exportBanner}
               </span>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center border border-[#3a3834] bg-[#111111] px-2.5 py-1.5">
-              <span className="text-[#88857e] mr-2">POLICY:</span>
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+            <div className="col-span-2 sm:col-span-1 flex items-center border border-[#3a3834] bg-[#111111] px-2.5 py-1.5 min-w-0">
+              <span className="text-[#88857e] mr-2 shrink-0 text-[11px]">POLICY:</span>
               <select
                 aria-label="Routing Policy"
                 value={state.algorithm}
                 onChange={(e) => handleAlgorithmChange(e.target.value)}
-                className="bg-transparent text-[#f2efe9] font-bold focus:outline-none cursor-pointer"
+                className="bg-transparent text-[#f2efe9] font-bold text-[11px] sm:text-xs focus:outline-none cursor-pointer w-full truncate"
               >
                 {ALGORITHMS.map((a) => (
                   <option key={a.id} value={a.id} className="bg-[#0e0e0e] text-[#f2efe9]">
@@ -283,13 +275,13 @@ export default function LiveDemoDashboardPage() {
               </select>
             </div>
 
-            <div className="flex items-center border border-[#3a3834] bg-[#111111] px-2.5 py-1.5">
-              <span className="text-[#88857e] mr-2">LOAD:</span>
+            <div className="col-span-2 sm:col-span-1 flex items-center border border-[#3a3834] bg-[#111111] px-2.5 py-1.5 min-w-0">
+              <span className="text-[#88857e] mr-2 shrink-0 text-[11px]">LOAD:</span>
               <select
                 aria-label="Traffic Profile"
                 value={state.traffic_profile}
                 onChange={(e) => handleTrafficChange(e.target.value)}
-                className="bg-transparent text-[#f2efe9] font-bold focus:outline-none cursor-pointer"
+                className="bg-transparent text-[#f2efe9] font-bold text-[11px] sm:text-xs focus:outline-none cursor-pointer w-full truncate"
               >
                 {TRAFFIC_PROFILES.map((p) => (
                   <option key={p.id} value={p.id} className="bg-[#0e0e0e] text-[#f2efe9]">
@@ -299,7 +291,10 @@ export default function LiveDemoDashboardPage() {
               </select>
             </div>
 
-            <button onClick={handleEvolveGP} className="brutal-btn brutal-btn-primary !py-1.5 !px-3">
+            <button
+              onClick={handleEvolveGP}
+              className="col-span-2 sm:col-span-1 brutal-btn brutal-btn-primary !py-1.5 !px-3"
+            >
               + EVOLVE GP (5 GEN)
             </button>
             <button onClick={handleExportCSV} className="brutal-btn !py-1.5 !px-3">
@@ -310,7 +305,7 @@ export default function LiveDemoDashboardPage() {
             </button>
             <button
               onClick={() => setIsPaused((p) => !p)}
-              className="brutal-btn !py-1.5 !px-3"
+              className="col-span-2 sm:col-span-1 brutal-btn !py-1.5 !px-3"
             >
               {isPaused ? "▶ RESUME" : "❚❚ PAUSE"}
             </button>
@@ -318,29 +313,30 @@ export default function LiveDemoDashboardPage() {
         </div>
       </div>
 
-      <main className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-8 pt-6 space-y-6">
+      <main className="flex-1 max-w-[1400px] w-full mx-auto px-3 sm:px-6 lg:px-8 pt-5 sm:pt-6 space-y-5 sm:space-y-6">
         {/* TELEMETRY NARRATOR */}
         <div
-          className={`border p-3.5 font-mono text-xs flex items-center justify-between gap-4 ${
+          className={`border p-3 sm:p-3.5 font-mono text-[11px] sm:text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 ${
             degradedNodes.length > 0
               ? "border-[#ffb300] bg-[#ffb300]/10 text-[#ffb300]"
               : "border-[#222220] bg-[#0e0e0e] text-[#f2efe9]"
           }`}
         >
-          <span>{sreNarrative}</span>
-          <span className="text-[#88857e] shrink-0">TICK #{state.tick}</span>
+          <span className="leading-relaxed break-words">{sreNarrative}</span>
+          <span className="text-[#88857e] shrink-0 text-[10px] sm:text-xs">TICK #{state.tick}</span>
         </div>
 
         {/* 5 KPI BLOCKS */}
-        <section className="grid grid-cols-2 lg:grid-cols-5 border border-[#222220] bg-[#0e0e0e]">
-          <div className="p-4 border-b lg:border-b-0 border-r border-[#222220]">
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 border border-[#222220] bg-[#0e0e0e] divide-y sm:divide-y-0 sm:divide-x divide-[#222220]">
+          <div className="p-4">
             <div className="font-mono text-[10px] text-[#88857e] uppercase">INGRESS TRAFFIC</div>
-            <div className="font-display font-black text-4xl text-[#f2efe9] mt-1">
+            <div className="font-display font-black text-3xl sm:text-4xl text-[#f2efe9] mt-1">
               {state.current_rps} RPS
             </div>
             <div className="mt-2 flex items-center gap-2">
               <input
                 type="range"
+                aria-label="Base Traffic RPS"
                 min={120}
                 max={1000}
                 step={20}
@@ -352,9 +348,9 @@ export default function LiveDemoDashboardPage() {
             </div>
           </div>
 
-          <div className="p-4 border-b lg:border-b-0 lg:border-r border-[#222220]">
+          <div className="p-4">
             <div className="font-mono text-[10px] text-[#88857e] uppercase">CLUSTER P95 LATENCY</div>
-            <div className="font-display font-black text-4xl text-[#00e676] mt-1">
+            <div className="font-display font-black text-3xl sm:text-4xl text-[#00e676] mt-1">
               {state.summary.active_p95_ms.toFixed(1)} ms
             </div>
             <div className="font-mono text-[11px] text-[#88857e] mt-1">
@@ -362,9 +358,9 @@ export default function LiveDemoDashboardPage() {
             </div>
           </div>
 
-          <div className="p-4 border-b sm:border-b-0 border-r border-[#222220]">
+          <div className="p-4">
             <div className="font-mono text-[10px] text-[#88857e] uppercase">ANFIS FAST LOOP</div>
-            <div className="font-display font-black text-4xl text-[#f2efe9] mt-1">
+            <div className="font-display font-black text-3xl sm:text-4xl text-[#f2efe9] mt-1">
               EPOCH #{state.anfis.epoch}
             </div>
             <div className="font-mono text-[11px] text-[#ff5500] mt-1">
@@ -372,9 +368,9 @@ export default function LiveDemoDashboardPage() {
             </div>
           </div>
 
-          <div className="p-4 border-r border-[#222220]">
+          <div className="p-4">
             <div className="font-mono text-[10px] text-[#88857e] uppercase">GP SYMBOLIC LOOP</div>
-            <div className="font-display font-black text-4xl text-[#f2efe9] mt-1">
+            <div className="font-display font-black text-3xl sm:text-4xl text-[#f2efe9] mt-1">
               GEN #{state.gp.generation}
             </div>
             <div className="font-mono text-[11px] text-[#00e676] mt-1">
@@ -382,9 +378,9 @@ export default function LiveDemoDashboardPage() {
             </div>
           </div>
 
-          <div className="p-4 col-span-2 lg:col-span-1">
+          <div className="p-4 sm:col-span-2 lg:col-span-1">
             <div className="font-mono text-[10px] text-[#88857e] uppercase">JAIN&apos;S FAIRNESS</div>
-            <div className="font-display font-black text-4xl text-[#f2efe9] mt-1">
+            <div className="font-display font-black text-3xl sm:text-4xl text-[#f2efe9] mt-1">
               {state.summary.jains_fairness.toFixed(3)}
             </div>
             <div className="font-mono text-[11px] text-[#88857e] mt-1">
@@ -400,24 +396,26 @@ export default function LiveDemoDashboardPage() {
             <span>BLENDING: λ={state.blending_lambda} ANFIS + {(1 - state.blending_lambda).toFixed(2)} GP</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-[#222220]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[#222220]">
             {state.nodes.map((node) => {
               const weightPct = Math.round(node.routing_weight * 100);
               const isDegraded = node.status === "degraded";
               const isOffline = node.status === "offline";
 
               return (
-                <div key={node.node_id} className="p-5 flex flex-col justify-between bg-[#0e0e0e]">
+                <div key={node.node_id} className="p-4 sm:p-5 flex flex-col justify-between bg-[#0e0e0e] min-w-0">
                   <div>
                     <div className="flex items-start justify-between gap-2 mb-3">
-                      <div>
-                        <div className="font-mono font-bold text-sm text-[#f2efe9]">{node.name}</div>
-                        <div className="font-mono text-[11px] text-[#88857e]">
+                      <div className="min-w-0">
+                        <div className="font-mono font-bold text-xs sm:text-sm text-[#f2efe9] truncate">
+                          {node.name}
+                        </div>
+                        <div className="font-mono text-[10px] sm:text-[11px] text-[#88857e]">
                           :{node.port} · {node.capacity_cores}vCPU · {node.memory_gb}GB
                         </div>
                       </div>
                       <span
-                        className={`font-mono text-[10px] uppercase px-2 py-0.5 border font-bold ${
+                        className={`font-mono text-[10px] uppercase px-2 py-0.5 border font-bold shrink-0 ${
                           isOffline
                             ? "border-[#ff2a2a] text-[#ff2a2a]"
                             : isDegraded
@@ -429,11 +427,10 @@ export default function LiveDemoDashboardPage() {
                       </span>
                     </div>
 
-                    {/* Weight Bar */}
-                    <div className="my-4">
+                    <div className="my-3.5 sm:my-4">
                       <div className="flex items-center justify-between font-mono text-xs mb-1.5">
                         <span className="text-[#88857e]">ROUTING SHARE (P_i)</span>
-                        <span className="text-lg font-bold text-[#ff5500]">{weightPct}%</span>
+                        <span className="text-base sm:text-lg font-bold text-[#ff5500]">{weightPct}%</span>
                       </div>
                       <div className="w-full h-3 bg-[#1a1a18] border border-[#222220]">
                         <div
@@ -449,7 +446,6 @@ export default function LiveDemoDashboardPage() {
                       </div>
                     </div>
 
-                    {/* Telemetry Grid */}
                     <div className="grid grid-cols-2 gap-2.5 pt-3 border-t border-[#222220] font-mono text-xs">
                       <div>
                         <span className="text-[10px] text-[#88857e] block">CPU / MEM</span>
@@ -459,7 +455,13 @@ export default function LiveDemoDashboardPage() {
                       </div>
                       <div>
                         <span className="text-[10px] text-[#88857e] block">P95 LATENCY</span>
-                        <span className={node.p95_latency_ms > 90 ? "text-[#ffb300] font-bold" : "text-[#00e676] font-bold"}>
+                        <span
+                          className={
+                            node.p95_latency_ms > 90
+                              ? "text-[#ffb300] font-bold"
+                              : "text-[#00e676] font-bold"
+                          }
+                        >
                           {node.p95_latency_ms.toFixed(1)} ms
                         </span>
                       </div>
@@ -476,8 +478,7 @@ export default function LiveDemoDashboardPage() {
                     </div>
                   </div>
 
-                  {/* Fault Buttons */}
-                  <div className="mt-5 pt-3 border-t border-[#222220] font-mono">
+                  <div className="mt-4 sm:mt-5 pt-3 border-t border-[#222220] font-mono">
                     <div className="flex items-center justify-between text-[10px] text-[#88857e] mb-2">
                       <span>INJECT FAULT:</span>
                       {(node.chaos.cpu_spike || node.chaos.io_lag || node.chaos.offline) && (
@@ -491,8 +492,10 @@ export default function LiveDemoDashboardPage() {
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
                       <button
-                        onClick={() => handleChaosToggle(node.node_id, "cpu_spike", !node.chaos.cpu_spike)}
-                        className={`py-1.5 text-[10px] font-bold border cursor-pointer ${
+                        onClick={() =>
+                          handleChaosToggle(node.node_id, "cpu_spike", !node.chaos.cpu_spike)
+                        }
+                        className={`py-2 text-[10px] font-bold border cursor-pointer ${
                           node.chaos.cpu_spike
                             ? "bg-[#ffb300] text-[#080808] border-[#ffb300]"
                             : "bg-[#151515] text-[#88857e] border-[#222220] hover:text-[#f2efe9]"
@@ -502,7 +505,7 @@ export default function LiveDemoDashboardPage() {
                       </button>
                       <button
                         onClick={() => handleChaosToggle(node.node_id, "io_lag", !node.chaos.io_lag)}
-                        className={`py-1.5 text-[10px] font-bold border cursor-pointer ${
+                        className={`py-2 text-[10px] font-bold border cursor-pointer ${
                           node.chaos.io_lag
                             ? "bg-[#ffb300] text-[#080808] border-[#ffb300]"
                             : "bg-[#151515] text-[#88857e] border-[#222220] hover:text-[#f2efe9]"
@@ -511,8 +514,10 @@ export default function LiveDemoDashboardPage() {
                         I/O LAG
                       </button>
                       <button
-                        onClick={() => handleChaosToggle(node.node_id, "offline", !node.chaos.offline)}
-                        className={`py-1.5 text-[10px] font-bold border cursor-pointer ${
+                        onClick={() =>
+                          handleChaosToggle(node.node_id, "offline", !node.chaos.offline)
+                        }
+                        className={`py-2 text-[10px] font-bold border cursor-pointer ${
                           node.chaos.offline
                             ? "bg-[#ff2a2a] text-[#f2efe9] border-[#ff2a2a]"
                             : "bg-[#151515] text-[#88857e] border-[#222220] hover:text-[#f2efe9]"
@@ -529,18 +534,18 @@ export default function LiveDemoDashboardPage() {
         </section>
 
         {/* CHARTS ROW 1: P95 LATENCY + ANFIS GAUSSIAN CURVES */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <section className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
           <div className="lg:col-span-7 panel-frame">
             <div className="panel-header">
               <span>REALTIME P95 TAIL LATENCY (ms) // FUZZLOAD VS STATIC BASELINES</span>
               <span>WINDOW: 45 TICKS</span>
             </div>
-            <div className="p-5 h-80 w-full">
+            <div className="p-3 sm:p-5 h-64 sm:h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={state.metrics_history}>
                   <CartesianGrid strokeDasharray="2 2" stroke="#222220" />
                   <XAxis dataKey="timestamp" stroke="#88857e" fontSize={10} />
-                  <YAxis stroke="#88857e" fontSize={10} unit="ms" />
+                  <YAxis stroke="#88857e" fontSize={10} width={38} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "#0b0b0b",
@@ -549,7 +554,7 @@ export default function LiveDemoDashboardPage() {
                       fontSize: "11px",
                     }}
                   />
-                  <Legend wrapperStyle={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "11px" }} />
+                  <Legend wrapperStyle={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "10px" }} />
                   <Area
                     type="monotone"
                     dataKey="round_robin_p95_ms"
@@ -603,12 +608,12 @@ export default function LiveDemoDashboardPage() {
               </div>
             </div>
 
-            <div className="p-4 h-56 w-full">
+            <div className="p-3 sm:p-4 h-52 sm:h-56 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={state.anfis.curves[selectedFeature] || []}>
                   <CartesianGrid strokeDasharray="2 2" stroke="#222220" />
                   <XAxis dataKey="x" stroke="#88857e" fontSize={10} />
-                  <YAxis stroke="#88857e" fontSize={10} domain={[0, 1]} />
+                  <YAxis stroke="#88857e" fontSize={10} domain={[0, 1]} width={32} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "#0b0b0b",
@@ -625,14 +630,18 @@ export default function LiveDemoDashboardPage() {
               </ResponsiveContainer>
             </div>
 
-            <div className="p-4 border-t border-[#222220] font-mono text-[11px] space-y-1.5">
+            <div className="p-3.5 sm:p-4 border-t border-[#222220] font-mono text-[11px] space-y-1.5">
               <div className="text-[10px] text-[#88857e] uppercase">
                 ACTIVE TAKAGI-SUGENO RULE FIRING STRENGTHS (LAYER 2 &amp; 3)
               </div>
               {state.anfis.rules.slice(0, 3).map((r) => (
                 <div key={r.rule_id} className="flex items-center justify-between gap-2">
-                  <span className="text-[#f2efe9] truncate">{r.description}</span>
-                  <span className="text-[#ff5500] font-bold shrink-0">w̄={r.firing_strength.toFixed(3)}</span>
+                  <span className="text-[#f2efe9] truncate text-[10px] sm:text-[11px]">
+                    {r.description}
+                  </span>
+                  <span className="text-[#ff5500] font-bold shrink-0">
+                    w̄={r.firing_strength.toFixed(3)}
+                  </span>
                 </div>
               ))}
             </div>
@@ -640,25 +649,25 @@ export default function LiveDemoDashboardPage() {
         </section>
 
         {/* CHARTS ROW 2: GP AST TREE + 5-ALGORITHM BENCHMARK */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <section className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
           <div className="lg:col-span-7 panel-frame flex flex-col justify-between">
             <div className="panel-header">
               <span>GENETIC PROGRAMMING // EVOLVED SYMBOLIC SYNTAX TREE (AST)</span>
               <span>DEPTH: {state.gp.tree_depth} · NODES: {state.gp.tree_size}</span>
             </div>
 
-            <div className="p-5 space-y-4">
-              <div className="p-3 border border-[#222220] bg-[#080808] font-mono text-xs text-[#00e676] overflow-x-auto">
+            <div className="p-3.5 sm:p-5 space-y-4">
+              <div className="p-3 border border-[#222220] bg-[#080808] font-mono text-[11px] sm:text-xs text-[#00e676] overflow-x-auto whitespace-nowrap">
                 <span className="text-[#88857e]">Φ_GP(x) = </span>
                 {state.gp.best_formula}
               </div>
 
-              <div className="py-6 px-4 border border-[#222220] bg-[#0b0b0b] overflow-x-auto flex justify-center">
+              <div className="py-5 px-3 border border-[#222220] bg-[#0b0b0b] overflow-x-auto flex justify-start sm:justify-center">
                 <ASTTreeVisualizer node={state.gp.ast_tree} />
               </div>
             </div>
 
-            <div className="px-5 py-3 border-t border-[#222220] font-mono text-[11px] text-[#88857e] flex flex-wrap justify-between">
+            <div className="px-4 sm:px-5 py-3 border-t border-[#222220] font-mono text-[10px] sm:text-[11px] text-[#88857e] flex flex-wrap justify-between gap-2">
               <span>TERMINALS: CPU, MEM, LAT, CONN, ERR, R</span>
               <span>OPS: +, -, *, DIV, MIN, MAX, EXP, SQRT, SQ</span>
             </div>
@@ -670,12 +679,12 @@ export default function LiveDemoDashboardPage() {
               <span>480 RPS TRACE</span>
             </div>
 
-            <div className="p-4 h-56 w-full">
+            <div className="p-3 sm:p-4 h-56 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={state.benchmark} layout="vertical">
                   <CartesianGrid strokeDasharray="2 2" stroke="#222220" />
-                  <XAxis type="number" stroke="#88857e" fontSize={10} unit="ms" />
-                  <YAxis type="category" dataKey="label" stroke="#f2efe9" fontSize={10} width={135} />
+                  <XAxis type="number" stroke="#88857e" fontSize={10} />
+                  <YAxis type="category" dataKey="label" stroke="#f2efe9" fontSize={9} width={115} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "#0b0b0b",
@@ -690,14 +699,14 @@ export default function LiveDemoDashboardPage() {
               </ResponsiveContainer>
             </div>
 
-            <div className="p-4 border-t border-[#222220] overflow-x-auto">
-              <table className="w-full text-left font-mono text-xs border-collapse">
+            <div className="p-3.5 sm:p-4 border-t border-[#222220] overflow-x-auto">
+              <table className="w-full min-w-[300px] text-left font-mono text-[11px] sm:text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-[#222220] text-[#88857e] text-[10px]">
-                    <th className="py-1.5">POLICY</th>
-                    <th className="py-1.5">P95</th>
-                    <th className="py-1.5">ERR%</th>
-                    <th className="py-1.5">FAIRNESS</th>
+                    <th className="py-1.5 pr-2">POLICY</th>
+                    <th className="py-1.5 px-2">P95</th>
+                    <th className="py-1.5 px-2">ERR%</th>
+                    <th className="py-1.5 pl-2">FAIRNESS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#222220]">
@@ -708,10 +717,10 @@ export default function LiveDemoDashboardPage() {
                         row.algorithm === "fuzzload" ? "text-[#00e676] font-bold" : "text-[#f2efe9]"
                       }
                     >
-                      <td className="py-1.5">{row.label}</td>
-                      <td className="py-1.5">{row.p95_latency_ms}ms</td>
-                      <td className="py-1.5">{row.error_rate_pct}%</td>
-                      <td className="py-1.5">{row.jains_fairness}</td>
+                      <td className="py-1.5 pr-2 whitespace-nowrap">{row.label}</td>
+                      <td className="py-1.5 px-2 whitespace-nowrap">{row.p95_latency_ms}ms</td>
+                      <td className="py-1.5 px-2 whitespace-nowrap">{row.error_rate_pct}%</td>
+                      <td className="py-1.5 pl-2 whitespace-nowrap">{row.jains_fairness}</td>
                     </tr>
                   ))}
                 </tbody>
