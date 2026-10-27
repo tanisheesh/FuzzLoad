@@ -1,0 +1,43 @@
+services:
+  proxy-go:
+    build:
+      context: ./proxy-go
+    container_name: fuzzload-proxy-go
+    ports:
+      - "8080:8080"
+      - "9001:9001"
+      - "9002:9002"
+      - "9003:9003"
+      - "9004:9004"
+    environment:
+      - GO_PROXY_PORT=8080
+    restart: unless-stopped
+
+  ai-control-plane:
+    build:
+      context: ./backend
+    container_name: fuzzload-ai-control-plane
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - GO_PROXY_URL=http://proxy-go:8080
+      - ANFIS_LEARNING_RATE=0.015
+      - GP_POPULATION_SIZE=36
+    depends_on:
+      - proxy-go
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    container_name: fuzzload-dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - ai-control-plane
+    restart: unless-stopped
