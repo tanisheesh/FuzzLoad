@@ -1,0 +1,60 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  TANISH'S SETUP TOOLKIT · tanisheesh.in                              ║
+# ║  Dependabot config. Goes to: <repo>/.github/dependabot.yml           ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
+version: 2
+
+updates:
+  # GitHub Actions used in .github/workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule: { interval: "weekly", day: "monday", time: "06:00", timezone: "Asia/Kolkata" }
+    commit-message: { prefix: "👷" }
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Frontend: Next.js / TypeScript
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule: { interval: "weekly", day: "monday", time: "06:00", timezone: "Asia/Kolkata" }
+    open-pull-requests-limit: 10
+    commit-message: { prefix: "👆" }
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # Backend: Python AI Control Plane
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule: { interval: "weekly", day: "monday", time: "06:00", timezone: "Asia/Kolkata" }
+    open-pull-requests-limit: 10
+    commit-message: { prefix: "👆" }
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # Data Plane: Go Reverse Proxy
+  - package-ecosystem: "gomod"
+    directory: "/proxy-go"
+    schedule: { interval: "weekly", day: "monday", time: "06:00", timezone: "Asia/Kolkata" }
+    open-pull-requests-limit: 10
+    commit-message: { prefix: "👆" }
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # Docker base images
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule: { interval: "weekly", day: "monday", time: "06:00", timezone: "Asia/Kolkata" }
+    commit-message: { prefix: "👆" }
+
+# ──────────────────────────────────────────────────────────────────────────
+#  Tanish Poddar
+#  Website   https://tanisheesh.in
+#  LinkedIn  https://linkedin.com/in/tanisheesh
+#  GitHub    https://github.com/tanisheesh
+#  Email     hi@tanisheesh.in
+# ──────────────────────────────────────────────────────────────────────────
