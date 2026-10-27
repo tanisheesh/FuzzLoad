@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: fuzzload-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: GO_PROXY_URL
+        value: http://127.0.0.1:8080
+      - key: ANFIS_LEARNING_RATE
+        value: 0.015
+      - key: GP_POPULATION_SIZE
+        value: 36
