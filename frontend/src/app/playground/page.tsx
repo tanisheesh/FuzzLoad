@@ -3,66 +3,64 @@
 import React, { useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import {
-  Check,
-  Copy,
-  Play,
-  Plus,
-  Server,
-  Sparkles,
-  Terminal,
-  Trash2,
-  Zap,
-} from "lucide-react";
 
 interface CustomUpstream {
   id: string;
   name: string;
   url: string;
   cores: number;
+  statusCode?: number;
+  bytesReceived?: number;
+  p50LatencyMs?: number;
   measuredLatencyMs: number;
   estimatedCpu: number;
   anfisScore: number;
   gpScore: number;
   assignedWeightPct: number;
-  status: "ready" | "probed" | "slow";
+  status: "ready" | "probed" | "slow" | "offline";
 }
 
 const INITIAL_UPSTREAMS: CustomUpstream[] = [
   {
     id: "up-1",
-    name: "Primary API Replica (ap-south-1a)",
-    url: "https://httpbin.org/delay/0",
+    name: "Primary Edge Upstream (Fast)",
+    url: "https://jsonplaceholder.typicode.com/posts/1",
     cores: 4,
-    measuredLatencyMs: 24.5,
-    estimatedCpu: 0.22,
-    anfisScore: 91.4,
-    gpScore: 93.1,
-    assignedWeightPct: 52,
+    statusCode: 200,
+    p50LatencyMs: 28.4,
+    measuredLatencyMs: 36.2,
+    estimatedCpu: 0.19,
+    anfisScore: 92.1,
+    gpScore: 93.8,
+    assignedWeightPct: 54,
     status: "probed",
   },
   {
     id: "up-2",
-    name: "Secondary API Replica (ap-south-1b)",
-    url: "https://jsonplaceholder.typicode.com/posts/1",
+    name: "Secondary Compute Node",
+    url: "https://httpbin.org/get",
     cores: 2,
-    measuredLatencyMs: 38.2,
-    estimatedCpu: 0.35,
-    anfisScore: 76.8,
-    gpScore: 78.4,
-    assignedWeightPct: 36,
+    statusCode: 200,
+    p50LatencyMs: 64.0,
+    measuredLatencyMs: 82.5,
+    estimatedCpu: 0.31,
+    anfisScore: 79.4,
+    gpScore: 81.0,
+    assignedWeightPct: 35,
     status: "probed",
   },
   {
     id: "up-3",
-    name: "Throttled Edge Worker (ap-south-1c)",
+    name: "Degraded / Delayed Worker",
     url: "https://httpbin.org/delay/1",
     cores: 1,
-    measuredLatencyMs: 148.0,
-    estimatedCpu: 0.81,
-    anfisScore: 28.4,
-    gpScore: 24.2,
-    assignedWeightPct: 12,
+    statusCode: 200,
+    p50LatencyMs: 310.0,
+    measuredLatencyMs: 420.0,
+    estimatedCpu: 0.84,
+    anfisScore: 22.4,
+    gpScore: 19.8,
+    assignedWeightPct: 11,
     status: "slow",
   },
 ];
@@ -72,108 +70,107 @@ export default function ProxyPlaygroundPage() {
   const [newName, setNewName] = useState("");
   const [newUrl, setNewUrl] = useState("");
   const [newCores, setNewCores] = useState(2);
+  const [burstRequests, setBurstRequests] = useState(3);
   const [isProbing, setIsProbing] = useState(false);
   const [copiedConfig, setCopiedConfig] = useState(false);
   const [probeLogs, setProbeLogs] = useState<string[]>([
-    "[ANFIS + GP Gateway] Initialized 3 upstream servers in routing table",
-    "[Probe] Primary API Replica (4c) -> 24.5ms TTBF | ANFIS=91.4 | GP=93.1 -> Weight=52%",
-    "[Probe] Secondary API Replica (2c) -> 38.2ms TTBF | ANFIS=76.8 | GP=78.4 -> Weight=36%",
-    "[Probe] Throttled Edge Worker (1c) -> 148.0ms TTBF (SLA violation) -> Drained to Weight=12%",
+    "[PROBER INIT] Paste any public HTTPS URL or API endpoint above and click 'ADD TARGET' to include it in the pool.",
+    "[READY] Click 'EXECUTE HTTP BURST' to fire real server-side requests via /api/probe and compute ANFIS + GP routing weights.",
   ]);
-
-  const recomputeWeights = (items: CustomUpstream[]): CustomUpstream[] => {
-    const scored = items.map((u) => {
-      const normLat = Math.min(1, u.measuredLatencyMs / 220);
-      const anfis = Math.max(
-        5,
-        Math.min(99, 100 * Math.exp(-1.25 * normLat - 0.7 * (u.estimatedCpu ** 1.5)))
-      );
-      const gpRaw = (1 - u.estimatedCpu ** 2) / (0.25 + normLat * 1.4);
-      const gp = Math.max(5, Math.min(99, (gpRaw / 4.0) * 100));
-      const rawWeight = Math.pow(0.58 * anfis + 0.42 * gp, 1.8) * Math.sqrt(u.cores / 2.0);
-      return {
-        ...u,
-        anfisScore: Number(anfis.toFixed(1)),
-        gpScore: Number(gp.toFixed(1)),
-        rawWeight,
-        status: (u.measuredLatencyMs > 95 ? "slow" : "probed") as "probed" | "slow",
-      };
-    });
-    const sumW = scored.reduce((acc, s) => acc + s.rawWeight, 0) || 1;
-    return scored.map(({ rawWeight, ...rest }) => ({
-      ...rest,
-      assignedWeightPct: Math.max(1, Math.round((rawWeight / sumW) * 100)),
-    }));
-  };
 
   const handleAddUpstream = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUrl.trim()) return;
+    const cleanUrl = newUrl.trim();
     const item: CustomUpstream = {
       id: `up-${Date.now()}`,
-      name: newName.trim() || `Upstream-${upstreams.length + 1}`,
-      url: newUrl.trim(),
+      name: newName.trim() || cleanUrl.replace(/^https?:\/\//, "").split("/")[0],
+      url: cleanUrl,
       cores: newCores,
-      measuredLatencyMs: Number((22 + Math.random() * 45).toFixed(1)),
-      estimatedCpu: Number((0.2 + Math.random() * 0.35).toFixed(2)),
-      anfisScore: 80,
-      gpScore: 80,
-      assignedWeightPct: 25,
-      status: "probed",
+      statusCode: 200,
+      p50LatencyMs: 40.0,
+      measuredLatencyMs: 55.0,
+      estimatedCpu: 0.25,
+      anfisScore: 85.0,
+      gpScore: 85.0,
+      assignedWeightPct: Math.round(100 / (upstreams.length + 1)),
+      status: "ready",
     };
-    const updated = recomputeWeights([...upstreams, item]);
-    setUpstreams(updated);
+    setUpstreams((prev) => [...prev, item]);
     setNewName("");
     setNewUrl("");
     setProbeLogs((prev) => [
-      `[Added Upstream] ${item.name} (${item.url}) registered and scored via 5-Layer ANFIS + GP`,
-      ...prev.slice(0, 11),
+      `[REGISTERED] ${item.url} (${item.cores}vCPU) added to upstream pool.`,
+      ...prev.slice(0, 14),
     ]);
   };
 
   const handleRemove = (id: string) => {
     if (upstreams.length <= 1) return;
-    const filtered = upstreams.filter((u) => u.id !== id);
-    setUpstreams(recomputeWeights(filtered));
+    setUpstreams((prev) => prev.filter((u) => u.id !== id));
   };
 
   const handleRunLiveBurst = async () => {
     setIsProbing(true);
-    const updatedList: CustomUpstream[] = [];
-
-    for (const u of upstreams) {
-      let measuredMs = u.measuredLatencyMs;
-      const start = performance.now();
-      try {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 1800);
-        await fetch(u.url, { mode: "no-cors", signal: ctrl.signal });
-        clearTimeout(timer);
-        const elapsed = performance.now() - start;
-        measuredMs = Number(Math.max(12, Math.min(240, elapsed * 0.35 + (u.cores === 1 ? 85 : 14))).toFixed(1));
-      } catch {
-        measuredMs = Number((u.cores === 1 ? 135 + Math.random() * 35 : 22 + Math.random() * 25).toFixed(1));
-      }
-      const cpuEst = Number(Math.min(0.95, 0.15 + measuredMs / 240).toFixed(2));
-      updatedList.push({
-        ...u,
-        measuredLatencyMs: measuredMs,
-        estimatedCpu: cpuEst,
-      });
-    }
-
-    const recomputed = recomputeWeights(updatedList);
-    setUpstreams(recomputed);
     setProbeLogs((prev) => [
-      `[Burst Completed] Probed ${recomputed.length} endpoints -> Updated atomic routing table: ${recomputed
-        .map((r) => `${r.name.split(" ")[0]}=${r.assignedWeightPct}% (${r.measuredLatencyMs}ms)`)
-        .join(", ")}`,
-      ...prev.slice(0, 11),
+      `[PROBING] Firing ${burstRequests} concurrent HTTP GET requests per target (${
+        burstRequests * upstreams.length
+      } total)...`,
+      ...prev.slice(0, 14),
     ]);
-    setIsProbing(false);
+
+    try {
+      const res = await fetch("/api/probe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestsPerTarget: burstRequests,
+          targets: upstreams.map((u) => ({
+            id: u.id,
+            name: u.name,
+            url: u.url,
+            cores: u.cores,
+          })),
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const updated: CustomUpstream[] = data.targets.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          url: t.url,
+          cores: t.cores,
+          statusCode: t.statusCode,
+          bytesReceived: t.bytesReceived,
+          p50LatencyMs: t.p50LatencyMs,
+          measuredLatencyMs: t.p95LatencyMs,
+          estimatedCpu: t.estimatedCpu,
+          anfisScore: t.anfisScore,
+          gpScore: t.gpScore,
+          assignedWeightPct: t.assignedWeightPct,
+          status: t.status,
+        }));
+        setUpstreams(updated);
+        const logEntries = updated.map(
+          (u) =>
+            `[HTTP ${u.statusCode || 200}] ${u.url} -> P50=${u.p50LatencyMs}ms, P95=${
+              u.measuredLatencyMs
+            }ms => ANFIS=${u.anfisScore}, GP=${u.gpScore} => SHARE=${u.assignedWeightPct}%`
+        );
+        setProbeLogs((prev) => [...logEntries, ...prev.slice(0, 10)]);
+      }
+    } catch (err) {
+      setProbeLogs((prev) => [
+        `[ERROR] ${err instanceof Error ? err.message : "Probe request failed"}`,
+        ...prev,
+      ]);
+    } finally {
+      setIsProbing(false);
+    }
   };
 
-  const cliCommand = `fuzzload start \\\n  --upstreams "${upstreams.map((u) => u.url).join(",")}" \\\n  --weights "${upstreams.map((u) => u.assignedWeightPct / 100).join(",")}" \\\n  --policy fuzzload \\\n  --port 8080`;
+  const cliCommand = `fuzzload start \\\n  --upstreams "${upstreams.map((u) => u.url).join(",")}" \\\n  --weights "${upstreams.map((u) => (u.assignedWeightPct / 100).toFixed(2)).join(",")}" \\\n  --policy fuzzload \\\n  --port 8080`;
 
   const handleCopyConfig = () => {
     navigator.clipboard.writeText(cliCommand);
@@ -182,67 +179,80 @@ export default function ProxyPlaygroundPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col">
+    <div className="min-h-screen flex flex-col">
       <Navbar />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 pt-8 space-y-8">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
+      <main className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-8 pt-8 space-y-6">
+        {/* HEADER */}
+        <div className="border border-[#222220] bg-[#0e0e0e] p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-emerald-400 mb-1">
-              <Terminal className="w-3.5 h-3.5" />
-              Bring Your Own Endpoints · Real Upstream Proxy Tester
+            <div className="font-mono text-xs text-[#ff5500] uppercase tracking-widest mb-2">
+              // REAL SERVER-SIDE HTTP BENCHMARK &amp; WEIGHT CALCULATOR
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white">
-              Plug FuzzLoad Into Your Own Microservices
+            <h1 className="font-display font-black text-4xl sm:text-5xl uppercase text-[#f2efe9]">
+              BENCHMARK ANY LIVE URL OR UPSTREAM API
             </h1>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
-              Register your own backend server URLs below, trigger a live HTTP latency probe, and watch the 5-Layer ANFIS + Genetic Programming engine compute optimal routing weights and generate your gateway config.
+            <p className="text-sm text-[#88857e] mt-2 max-w-2xl">
+              Enter any live URL or API endpoint below. When you execute a probe burst, the server fires real concurrent HTTP GET requests, measures true P50/P95 response times, and computes exact 5-Layer ANFIS + Genetic Programming routing weights.
             </p>
           </div>
 
-          <button
-            onClick={handleRunLiveBurst}
-            disabled={isProbing}
-            className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-xs sm:text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-lg shadow-emerald-600/20 transition cursor-pointer shrink-0"
-          >
-            <Play className="w-4 h-4" />
-            <span>{isProbing ? "Probing Upstreams..." : "Fire Live HTTP Probe Burst"}</span>
-          </button>
+          <div className="flex items-center gap-3 shrink-0 font-mono">
+            <div className="border border-[#3a3834] bg-[#151515] px-3 py-2.5 text-xs">
+              <span className="text-[#88857e] mr-2">BURST:</span>
+              <select
+                value={burstRequests}
+                onChange={(e) => setBurstRequests(Number(e.target.value))}
+                className="bg-transparent font-bold text-[#f2efe9] focus:outline-none"
+              >
+                <option value={2} className="bg-[#0e0e0e]">2 REQS/URL</option>
+                <option value={4} className="bg-[#0e0e0e]">4 REQS/URL</option>
+                <option value={6} className="bg-[#0e0e0e]">6 REQS/URL</option>
+              </select>
+            </div>
+
+            <button
+              onClick={handleRunLiveBurst}
+              disabled={isProbing}
+              className="brutal-btn brutal-btn-primary"
+            >
+              {isProbing ? "PROBING UPSTREAMS..." : "▶ EXECUTE HTTP BURST"}
+            </button>
+          </div>
         </div>
 
-        {/* Add Custom Upstream Form */}
+        {/* ADD TARGET FORM */}
         <form
           onSubmit={handleAddUpstream}
-          className="rounded-2xl bg-slate-900/70 border border-slate-800 p-5 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end"
+          className="panel-frame p-5 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end font-mono"
         >
-          <div className="sm:col-span-4">
-            <label className="block text-xs text-slate-400 mb-1">Server Name / Alias</label>
+          <div className="sm:col-span-3">
+            <label className="block text-[10px] text-[#88857e] uppercase mb-1">NODE ALIAS (OPTIONAL)</label>
             <input
               type="text"
-              placeholder="e.g. Checkout-Service-2"
+              placeholder="e.g. prod-api-east"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              className="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+              className="w-full bg-[#080808] border border-[#3a3834] px-3 py-2.5 text-xs text-[#f2efe9] focus:outline-none focus:border-[#ff5500]"
             />
           </div>
-          <div className="sm:col-span-5">
-            <label className="block text-xs text-slate-400 mb-1">Upstream HTTP/HTTPS URL</label>
+          <div className="sm:col-span-6">
+            <label className="block text-[10px] text-[#88857e] uppercase mb-1">TARGET HTTPS / HTTP URL TO PROBE</label>
             <input
               type="url"
               required
-              placeholder="https://api.example.com/health or http://localhost:4001"
+              placeholder="https://your-domain-or-api.com"
               value={newUrl}
               onChange={(e) => setNewUrl(e.target.value)}
-              className="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-indigo-500"
+              className="w-full bg-[#080808] border border-[#3a3834] px-3 py-2.5 text-xs text-[#f2efe9] focus:outline-none focus:border-[#ff5500]"
             />
           </div>
           <div className="sm:col-span-1">
-            <label className="block text-xs text-slate-400 mb-1">vCPUs</label>
+            <label className="block text-[10px] text-[#88857e] uppercase mb-1">CORES</label>
             <select
               value={newCores}
               onChange={(e) => setNewCores(Number(e.target.value))}
-              className="w-full rounded-lg bg-slate-950 border border-slate-800 px-2 py-2 text-xs font-mono text-white"
+              className="w-full bg-[#080808] border border-[#3a3834] px-2 py-2.5 text-xs text-[#f2efe9]"
             >
               <option value={1}>1c</option>
               <option value={2}>2c</option>
@@ -251,121 +261,105 @@ export default function ProxyPlaygroundPage() {
             </select>
           </div>
           <div className="sm:col-span-2">
-            <button
-              type="submit"
-              className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Node
+            <button type="submit" className="brutal-btn w-full">
+              + ADD TARGET
             </button>
           </div>
         </form>
 
-        {/* Registered Upstreams Table & ANFIS+GP Computed Weights */}
+        {/* TARGET POOL + LOGS */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-7 space-y-3">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <Server className="w-4 h-4 text-indigo-400" />
-              Active Upstream Pool ({upstreams.length} Servers)
-            </h2>
-
             {upstreams.map((u) => (
-              <div
-                key={u.id}
-                className="rounded-xl bg-slate-900/60 border border-slate-800 p-4 space-y-3"
-              >
-                <div className="flex items-start justify-between gap-2">
+              <div key={u.id} className="panel-frame p-5 space-y-3 font-mono">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm text-white">{u.name}</span>
-                      <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                        {u.cores} vCPU
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-sm text-[#f2efe9]">{u.name}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 border border-[#3a3834] text-[#88857e]">
+                        {u.cores}vCPU
                       </span>
+                      {u.statusCode && (
+                        <span className="text-[10px] px-1.5 py-0.5 border border-[#00e676] text-[#00e676]">
+                          HTTP {u.statusCode}
+                        </span>
+                      )}
                     </div>
-                    <div className="text-xs font-mono text-slate-400 mt-0.5 break-all">{u.url}</div>
+                    <div className="text-xs text-[#88857e] mt-1 break-all">{u.url}</div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-mono font-bold text-indigo-300">
-                      {u.assignedWeightPct}% Traffic
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-bold text-[#ff5500]">
+                      {u.assignedWeightPct}% SHARE
                     </span>
                     <button
                       onClick={() => handleRemove(u.id)}
-                      className="p-1.5 rounded-lg bg-slate-950 hover:bg-rose-950/50 text-slate-400 hover:text-rose-300 border border-slate-800 transition cursor-pointer"
-                      title="Remove upstream"
+                      className="px-2 py-1 border border-[#3a3834] text-[10px] text-[#88857e] hover:border-[#ff2a2a] hover:text-[#ff2a2a] cursor-pointer"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      DEL
                     </button>
                   </div>
                 </div>
 
-                <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden">
+                <div className="w-full h-2.5 bg-[#151515] border border-[#222220]">
                   <div
                     className={`h-full transition-all duration-300 ${
-                      u.status === "slow"
-                        ? "bg-gradient-to-r from-amber-500 to-rose-500"
-                        : "bg-gradient-to-r from-indigo-500 to-emerald-400"
+                      u.status === "slow" || u.status === "offline" ? "bg-[#ffb300]" : "bg-[#00e676]"
                     }`}
                     style={{ width: `${u.assignedWeightPct}%` }}
                   />
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/70 text-xs font-mono">
+                <div className="grid grid-cols-4 gap-2 pt-2 border-t border-[#222220] text-xs">
                   <div>
-                    <span className="text-slate-500 block text-[10px] font-sans">Measured Latency</span>
-                    <span className={u.measuredLatencyMs > 90 ? "text-amber-300" : "text-emerald-300"}>
+                    <span className="text-[10px] text-[#88857e] block">P50 LATENCY</span>
+                    <span className="text-[#f2efe9] font-bold">{u.p50LatencyMs ?? u.measuredLatencyMs} ms</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#88857e] block">P95 LATENCY</span>
+                    <span className={u.measuredLatencyMs > 200 ? "text-[#ffb300] font-bold" : "text-[#00e676] font-bold"}>
                       {u.measuredLatencyMs} ms
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px] font-sans">ANFIS Neural Score</span>
-                    <span className="text-violet-300">{u.anfisScore} / 100</span>
+                    <span className="text-[10px] text-[#88857e] block">ANFIS SCORE</span>
+                    <span className="text-[#f2efe9]">{u.anfisScore} / 100</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px] font-sans">GP Symbolic Score</span>
-                    <span className="text-indigo-300">{u.gpScore} / 100</span>
+                    <span className="text-[10px] text-[#88857e] block">GP SCORE</span>
+                    <span className="text-[#f2efe9]">{u.gpScore} / 100</span>
                   </div>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Right Column: Generated CLI Config & Live Probe Log */}
           <div className="lg:col-span-5 space-y-6">
-            <div className="rounded-2xl bg-slate-900/70 border border-slate-800 p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-indigo-400" />
-                  Generated Gateway Command
-                </h3>
+            <div className="panel-frame">
+              <div className="panel-header">
+                <span>GENERATED GATEWAY CLI CONFIG</span>
                 <button
                   onClick={handleCopyConfig}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-800 border border-slate-700 text-xs text-slate-300 cursor-pointer"
+                  className="text-[#ff5500] hover:underline font-bold cursor-pointer"
                 >
-                  {copiedConfig ? (
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5" />
-                  )}
-                  {copiedConfig ? "Copied" : "Copy CLI"}
+                  {copiedConfig ? "[COPIED]" : "[COPY]"}
                 </button>
               </div>
-              <p className="text-xs text-slate-400">
-                Run this command in your terminal to launch the FuzzLoad Reverse Proxy in front of the exact servers above:
-              </p>
-              <pre className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-emerald-300 overflow-x-auto leading-relaxed">
-                {cliCommand}
-              </pre>
+              <div className="p-4">
+                <pre className="p-3 bg-[#080808] border border-[#222220] font-mono text-xs text-[#00e676] overflow-x-auto leading-relaxed">
+                  {cliCommand}
+                </pre>
+              </div>
             </div>
 
-            <div className="rounded-2xl bg-slate-900/70 border border-slate-800 p-5 space-y-3">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-400" />
-                Live Probe &amp; Weight Adaptation Log
-              </h3>
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 font-mono text-[11px] text-slate-300 space-y-2 max-h-60 overflow-y-auto">
+            <div className="panel-frame">
+              <div className="panel-header">
+                <span>SERVER-SIDE HTTP PROBE TELEMETRY LOG</span>
+                <span>/api/probe</span>
+              </div>
+              <div className="p-4 font-mono text-[11px] text-[#88857e] space-y-2 max-h-72 overflow-y-auto">
                 {probeLogs.map((log, index) => (
-                  <div key={index} className="border-b border-slate-900 pb-1.5 last:border-none">
+                  <div key={index} className="border-b border-[#222220] pb-1.5 last:border-none text-[#f2efe9]">
                     {log}
                   </div>
                 ))}
