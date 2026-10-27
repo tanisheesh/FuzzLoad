@@ -20,7 +20,7 @@
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/AWS-232F3E?style=flat-square&logo=amazon-aws&logoColor=white" alt="AWS">
   <img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker">
-  <img src="https://img.shields.io/badge/license-GPL--3.0-FF5500?style=flat-square" alt="License">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-FF5500?style=flat-square" alt="License"></a>
 </p>
 
 ---
