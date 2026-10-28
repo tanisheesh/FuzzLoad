@@ -144,7 +144,7 @@ export default function OpenGraphImage() {
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
             <span style={{ fontSize: "19px", fontWeight: 800, color: "#F2EFE9" }}>
-              TANISH PODDAR &amp; KRISH
+              TANISH PODDAR &amp; KRISH GOHEL
             </span>
             <span style={{ fontSize: "13px", color: "#88857E" }}>
               tanisheesh.in · @krish-codess

@@ -22,10 +22,10 @@ export const metadata: Metadata = {
   applicationName: "FuzzLoad",
   authors: [
     { name: "Tanish Poddar", url: "https://tanisheesh.in" },
-    { name: "Krish", url: "https://github.com/krish-codess" },
+    { name: "Krish Gohel", url: "https://github.com/krish-codess" },
   ],
-  creator: "Tanish Poddar & Krish",
-  publisher: "Tanish Poddar",
+  creator: "Tanish Poddar & Krish Gohel",
+  publisher: "Tanish Poddar & Krish Gohel",
   keywords: [
     "FuzzLoad",
     "Adaptive Load Balancing",
@@ -93,7 +93,7 @@ const jsonLd = {
     },
     {
       "@type": "Person",
-      name: "Krish",
+      name: "Krish Gohel",
       url: "https://github.com/krish-codess",
     },
   ],

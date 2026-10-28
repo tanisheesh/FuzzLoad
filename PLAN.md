@@ -1,7 +1,7 @@
 # FuzzLoad — Product, Architecture & Execution Plan (`PLAN.md`)
 
 **Project:** FuzzLoad — Adaptive Web Server Load Balancing Using Genetic Programming and Neuro-Fuzzy Control  
-**Owners:** Tanish Poddar (`tanisheesh.in`) & Krish (`github.com/krish-codess`)  
+**Owners:** Tanish Poddar (`tanisheesh.in`) & Krish Gohel (`github.com/krish-codess`)  
 **Target Bar:** Portfolio Flagship (`Reqly` / `DiffHawk` / `NetPulse AI` tier) + Final-Year B.Tech CSE Capstone Research System  
 
 ---
