@@ -52,9 +52,15 @@ def test_anfis_five_layer_lr_fuzzy_and_centroid() -> None:
     assert abs(sum(cache_s["w_norm"]) - 1.0) < 1e-4
 
     initial_epoch = anfis.epoch
-    scores = anfis.step_online_learning([healthy_vec, stressed_vec], [22.0, 195.0])
+    for _ in range(30):
+        scores = anfis.step_online_learning([healthy_vec, stressed_vec], [22.0, 195.0])
     assert len(scores) == 2
-    assert anfis.epoch == initial_epoch + 1
+    assert anfis.epoch == initial_epoch + 30
+
+    # Verify semantic ordering (c_Low < c_Medium < c_High) is preserved after repeated online backprop + GA tuning
+    anfis.apply_ga_structural_tuning([1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1], center_shift=0.22)
+    for m in range(4):
+        assert anfis.centers[m][0] < anfis.centers[m][1] < anfis.centers[m][2]
 
     curves = anfis.get_membership_curves()
     assert "cpu" in curves["curves"]
@@ -130,12 +136,22 @@ def test_cluster_controller_chaos_and_algorithms() -> None:
     assert node4["routing_weight"] == 0.0
     assert node4["status"] == "offline"
 
-    ctrl.inject_chaos("node-2", "clear_all", True)
-    ctrl.inject_chaos("node-4", "clear_all", True)
+    # Edge case: all 4 nodes offline should not divide by zero
+    for nid in ("node-1", "node-2", "node-3", "node-4"):
+        ctrl.inject_chaos(nid, "offline", True)
+    all_off = ctrl.get_full_state()
+    assert all(n["status"] == "offline" for n in all_off["nodes"])
+
+    for nid in ("node-1", "node-2", "node-3", "node-4"):
+        ctrl.inject_chaos(nid, "clear_all", True)
     bench = ctrl.run_comparative_benchmark()
     assert len(bench) == 5
     by_algo = {b["algorithm"]: b for b in bench}
     assert by_algo["fuzzload"]["p95_latency_ms"] < by_algo["round_robin"]["p95_latency_ms"]
+
+    # Verify trigger_gp_evolution immediately syncs FLC-GA rule mask into ANFIS
+    evolved = ctrl.trigger_gp_evolution(generations=4)
+    assert evolved["anfis"]["active_rule_mask"] == evolved["gp"]["rule_mask_bitstring"]
 
 
 def test_fuzzload_router_sdk() -> None:

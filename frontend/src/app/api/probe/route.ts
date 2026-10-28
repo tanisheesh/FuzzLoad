@@ -7,6 +7,29 @@ interface ProbeTargetInput {
   cores: number;
 }
 
+function computePercentile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  if (sorted.length === 1) return sorted[0];
+  const pos = (sorted.length - 1) * p;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  const next = sorted[Math.min(sorted.length - 1, base + 1)];
+  return sorted[base] + rest * (next - sorted[base]);
+}
+
+function isSafeHttpUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    const host = parsed.hostname.toLowerCase();
+    // Block cloud metadata SSRF targets
+    if (host === "169.254.169.254" || host === "metadata.google.internal") return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -19,10 +42,28 @@ export async function POST(req: NextRequest) {
 
     const probedResults = await Promise.all(
       targets.map(async (target) => {
+        if (!isSafeHttpUrl(target.url)) {
+          return {
+            ...target,
+            statusCode: 400,
+            bytesReceived: 0,
+            serverHeader: "Blocked",
+            p50LatencyMs: 999.0,
+            p95LatencyMs: 999.0,
+            p99LatencyMs: 999.0,
+            errorRate: 1.0,
+            estimatedCpu: 0.99,
+            anfisScore: 1.0,
+            gpScore: 1.0,
+            rawWeight: 0.01,
+            samples: [],
+          };
+        }
+
         const latencies: number[] = [];
         let statusCode = 0;
         let bytesReceived = 0;
-        let serverHeader = "unknown";
+        let serverHeader = "Origin";
         let errors = 0;
 
         for (let i = 0; i < burstCount; i++) {
@@ -44,7 +85,9 @@ export async function POST(req: NextRequest) {
             latencies.push(elapsed);
             statusCode = resp.status;
             bytesReceived = text.length;
-            serverHeader = resp.headers.get("server") || resp.headers.get("x-vercel-id") ? "Vercel Edge" : "Origin";
+            serverHeader =
+              resp.headers.get("server") ||
+              (resp.headers.get("x-vercel-id") ? "Vercel Edge" : "Origin");
             if (!resp.ok) errors += 1;
           } catch {
             const elapsed = performance.now() - start;
@@ -54,9 +97,9 @@ export async function POST(req: NextRequest) {
         }
 
         latencies.sort((a, b) => a - b);
-        const p50 = latencies[Math.floor((latencies.length - 1) * 0.5)] || 0;
-        const p95 = latencies[Math.floor((latencies.length - 1) * 0.95)] || p50;
-        const p99 = latencies[latencies.length - 1] || p95;
+        const p50 = computePercentile(latencies, 0.5);
+        const p95 = computePercentile(latencies, 0.95);
+        const p99 = computePercentile(latencies, 0.99);
         const errRate = errors / burstCount;
 
         // 5-Layer ANFIS + GP Evaluation on REAL measured HTTP telemetry
@@ -72,7 +115,8 @@ export async function POST(req: NextRequest) {
         const gpRaw = (1.0 - estLoad * estLoad) / (0.25 + normLat * (1.0 + errRate * 3.0));
         const gpScore = Math.max(2.0, Math.min(99.5, (gpRaw / 4.0) * 100.0));
         const rawWeight =
-          Math.pow(0.58 * anfisScore + 0.42 * gpScore, 1.85) * Math.sqrt(Math.max(1, target.cores) / 2.0);
+          Math.pow(0.58 * anfisScore + 0.42 * gpScore, 1.85) *
+          Math.sqrt(Math.max(1, target.cores) / 2.0);
 
         return {
           ...target,

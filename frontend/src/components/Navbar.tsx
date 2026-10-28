@@ -4,6 +4,29 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+function FuzzLoadLogo() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="30"
+      height="30"
+      viewBox="0 0 64 64"
+      fill="none"
+      className="shrink-0 transition-transform group-hover:scale-105"
+      aria-hidden="true"
+    >
+      <rect width="64" height="64" fill="#080808" />
+      <rect x="3" y="3" width="58" height="58" stroke="#FF5500" strokeWidth="4" />
+      <rect x="11" y="13" width="42" height="15" fill="#FF5500" />
+      <rect x="16" y="18" width="5" height="5" fill="#080808" />
+      <rect x="26" y="19" width="21" height="3" fill="#080808" />
+      <rect x="11" y="36" width="42" height="15" stroke="#F2EFE9" strokeWidth="3" fill="#111111" />
+      <rect x="16" y="41" width="5" height="5" fill="#00E676" />
+      <rect x="26" y="42" width="21" height="3" fill="#F2EFE9" />
+    </svg>
+  );
+}
+
 export default function Navbar() {
   const pathname = usePathname();
 
@@ -17,11 +40,9 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full bg-[#080808]/95 backdrop-blur-sm border-b border-[#222220]">
       <div className="max-w-[1400px] mx-auto px-3 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-2">
-        {/* Brand */}
+        {/* Brand with SVG Logo */}
         <Link href="/" className="flex items-center gap-2.5 group min-w-0">
-          <div className="w-7 h-7 shrink-0 bg-[#ff5500] text-[#080808] font-mono font-bold text-xs flex items-center justify-center tracking-tighter">
-            FL
-          </div>
+          <FuzzLoadLogo />
           <div className="flex items-baseline gap-2 truncate">
             <span className="font-display font-black text-xl sm:text-2xl tracking-tight text-[#f2efe9]">
               FUZZLOAD
@@ -64,7 +85,10 @@ export default function Navbar() {
             SRC ↗
           </a>
           {pathname !== "/dashboard" ? (
-            <Link href="/dashboard" className="brutal-btn brutal-btn-primary !py-1.5 !px-3 sm:!py-2 sm:!px-4 !text-[10px] sm:!text-xs">
+            <Link
+              href="/dashboard"
+              className="brutal-btn brutal-btn-primary !py-1.5 !px-3 sm:!py-2 sm:!px-4 !text-[10px] sm:!text-xs"
+            >
               CONSOLE →
             </Link>
           ) : (
@@ -79,7 +103,10 @@ export default function Navbar() {
       </div>
 
       {/* Mobile Navigation Strip */}
-      <nav aria-label="Mobile Navigation" className="grid grid-cols-4 md:hidden border-t border-[#222220] bg-[#0b0b0b]">
+      <nav
+        aria-label="Mobile Navigation"
+        className="grid grid-cols-4 md:hidden border-t border-[#222220] bg-[#0b0b0b]"
+      >
         {navLinks.map((item) => {
           const active = pathname === item.href;
           return (
@@ -87,7 +114,9 @@ export default function Navbar() {
               key={item.href}
               href={item.href}
               className={`py-2.5 px-1 text-center font-mono text-[10px] tracking-wider border-r border-[#222220] last:border-r-0 truncate ${
-                active ? "text-[#ff5500] bg-[#151515] font-bold border-b-2 border-b-[#ff5500]" : "text-[#88857e]"
+                active
+                  ? "text-[#ff5500] bg-[#151515] font-bold border-b-2 border-b-[#ff5500]"
+                  : "text-[#88857e]"
               }`}
             >
               <span className="hidden xs:inline">[{item.code}] </span>

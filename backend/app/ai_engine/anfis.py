@@ -83,13 +83,19 @@ class TakagiSugenoANFIS:
         self.mp_xor_gate = McCullochPittsGateAndXORNetwork(threshold=1.0)
 
         # Layer 1 Premise Parameters: shape (4 features, 3 linguistic terms: Low, Med, High)
-        self.centers: list[list[float]] = [
+        self._base_centers: list[list[float]] = [
             [0.18, 0.50, 0.84],  # CPU
             [0.20, 0.52, 0.85],  # Memory
             [0.15, 0.45, 0.80],  # Normalized Latency
             [0.18, 0.48, 0.82],  # Normalized Active Connections
         ]
+        self.centers: list[list[float]] = [list(row) for row in self._base_centers]
         self.sigmas: list[list[float]] = [[0.24, 0.24, 0.24] for _ in range(4)]
+        self._term_bounds: tuple[tuple[float, float], ...] = (
+            (0.05, 0.34),  # Low center bounds
+            (0.36, 0.65),  # Medium center bounds
+            (0.67, 0.95),  # High center bounds
+        )
 
         # Asymmetric LR-Type Fuzzy Number spreads (alpha_left, beta_right) per term
         self.lr_spreads: list[tuple[float, float]] = [
@@ -186,13 +192,15 @@ class TakagiSugenoANFIS:
     def apply_ga_structural_tuning(
         self, rule_mask: Sequence[int], center_shift: float = 0.0
     ) -> None:
-        """Apply FLC-GA structural rule mask and GA-based BPN premise weight shift."""
+        """Apply FLC-GA structural rule mask and bounded GA-based BPN premise weight shift."""
         if len(rule_mask) == len(self.rules) and sum(rule_mask) >= 4:
             self.active_rule_mask = [1 if int(b) > 0 else 0 for b in rule_mask]
         if abs(center_shift) > 1e-5:
             for m in range(4):
                 for t in range(3):
-                    self.centers[m][t] = _clip(self.centers[m][t] + center_shift * 0.02, 0.06, 0.94)
+                    low_b, high_b = self._term_bounds[t]
+                    target_c = 0.7 * self.centers[m][t] + 0.3 * (self._base_centers[m][t] + center_shift * 0.12)
+                    self.centers[m][t] = _clip(target_c, low_b, high_b)
 
     def forward_single(self, x: Sequence[float]) -> tuple[float, dict[str, Any]]:
         """Run 5-layer forward inference for a single server telemetry vector x = [cpu, mem, lat, conn]."""
@@ -327,13 +335,17 @@ class TakagiSugenoANFIS:
                         - (self.learning_rate * 0.25) * grad_c
                     )
                     self._vel_centers[m][t_idx] = vel_c
-                    self.centers[m][t_idx] = _clip(self.centers[m][t_idx] + vel_c, 0.05, 0.95)
+                    low_b, high_b = self._term_bounds[t_idx]
+                    self.centers[m][t_idx] = _clip(self.centers[m][t_idx] + vel_c, low_b, high_b)
                     self.sigmas[m][t_idx] = _clip(
                         self.sigmas[m][t_idx] - (self.learning_rate * 0.15) * grad_s,
                         0.10,
                         0.42,
                     )
 
+        self._last_centroid_score = round(
+            sum(float(c["centroid_score"]) for c in caches) / max(n_caches, 1), 2
+        )
         self.epoch += 1
         mean_loss = float(total_loss / max(n_caches, 1))
         self.loss_history.append({"epoch": self.epoch, "loss": round(mean_loss, 6)})

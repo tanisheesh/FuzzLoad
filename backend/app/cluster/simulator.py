@@ -451,6 +451,10 @@ class FuzzLoadClusterController:
     def trigger_gp_evolution(self, generations: int = 5) -> dict[str, Any]:
         generations = max(1, min(20, int(generations)))
         self.gp.evolve_generation(self.replay_buffer, generations=generations)
+        self.anfis.apply_ga_structural_tuning(
+            self.gp.best_ga_chromosome.rule_bits,
+            self.gp.best_ga_chromosome.bpn_weight_delta,
+        )
         return self.step_fast_loop(sync_go=True)
 
     def run_comparative_benchmark(self) -> list[dict[str, Any]]:

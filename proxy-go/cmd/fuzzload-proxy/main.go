@@ -66,7 +66,17 @@ func (n *WorkerNode) recordLatency(ms float64, isErr bool) {
 		n.P99LatencyMs = sorted[int(float64(l-1)*0.99)]
 	}
 	if isErr {
-		atomic.AddUint64(&n.ErrorsCount, 1)
+		errs := atomic.AddUint64(&n.ErrorsCount, 1)
+		reqs := atomic.LoadUint64(&n.RequestsServed)
+		if reqs > 0 {
+			n.ErrorRate = float64(errs) / float64(reqs)
+		}
+	} else {
+		errs := atomic.LoadUint64(&n.ErrorsCount)
+		reqs := atomic.LoadUint64(&n.RequestsServed)
+		if reqs > 0 {
+			n.ErrorRate = float64(errs) / float64(reqs)
+		}
 	}
 }
 
@@ -111,6 +121,10 @@ func NewFuzzLoadProxy() *FuzzLoadProxy {
 			P99LatencyMs:  35.0,
 			RoutingWeight: 0.25,
 			latencies:     []float64{18.0, 20.0, 22.0},
+		}
+		proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
+			node.recordLatency(250.0, true)
+			http.Error(w, fmt.Sprintf("upstream error on %s: %v", node.ID, err), http.StatusBadGateway)
 		}
 		nodes = append(nodes, node)
 	}
