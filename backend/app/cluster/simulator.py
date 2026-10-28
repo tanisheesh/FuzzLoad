@@ -12,6 +12,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.ai_engine.anfis import TakagiSugenoANFIS
+from app.ai_engine.art_bam_memory import (
+    AdaptiveResonanceART1,
+    AdaptiveResonanceART2,
+    ExponentialBAMAssociativeMemory,
+)
 from app.ai_engine.gp_optimizer import GeneticProgrammingOptimizer
 
 VALID_ALGORITHMS = (
@@ -118,6 +123,10 @@ class FuzzLoadClusterController:
             population_size=int(os.getenv("GP_POPULATION_SIZE", "36")),
             max_depth=4,
         )
+        self.art1 = AdaptiveResonanceART1(num_features=4, vigilance=0.70)
+        self.art2 = AdaptiveResonanceART2(vigilance=0.86, learning_rate=0.18)
+        self.bam = ExponentialBAMAssociativeMemory(gamma=2.4)
+        self.last_art_bam_state: dict[str, Any] = {}
         self.blending_lambda = float(os.getenv("GP_BLENDING_LAMBDA", "0.58"))
         self.algorithm: str = "fuzzload"
         self.traffic_profile: str = "sine_wave"
@@ -222,11 +231,43 @@ class FuzzLoadClusterController:
         anfis_scores = self.anfis.step_online_learning(node_vectors, observed_lats)
         gp_scores = self.gp.score_nodes(node_envs)
 
+        # ART1 Binary Signature + ART2 Continuous Regime Clustering + Exponential BAM Recall
+        mean_cpu = sum(v[0] for v in node_vectors) / len(node_vectors)
+        mean_mem = sum(v[1] for v in node_vectors) / len(node_vectors)
+        mean_lat = sum(v[2] for v in node_vectors) / len(node_vectors)
+        mean_conn = sum(v[3] for v in node_vectors) / len(node_vectors)
+        binary_fault_sig = [
+            1 if any(n.cpu_usage > 0.78 or n.chaos.cpu_spike for n in self.nodes) else 0,
+            1 if any(n.mem_usage > 0.78 or n.chaos.mem_leak for n in self.nodes) else 0,
+            1 if any(n.p95_latency_ms > 95.0 or n.chaos.io_lag for n in self.nodes) else 0,
+            1 if any(n.error_rate > 0.02 or n.chaos.offline for n in self.nodes) else 0,
+        ]
+        art1_res = self.art1.classify_binary_signature(binary_fault_sig)
+        art2_res = self.art2.classify_and_learn([mean_cpu, mean_mem, mean_lat, mean_conn])
+        stress_vec = [
+            min(1.0, 0.5 * n.cpu_usage + 0.5 * (n.p95_latency_ms / 220.0))
+            for n in self.nodes
+        ]
+        bam_prior_weights, bam_resonance = self.bam.forward_heterocorrelator_recall(stress_vec)
+        self.last_art_bam_state = {
+            "art1": art1_res,
+            "art2": art2_res,
+            "bam_prior_weights": bam_prior_weights,
+            "bam_resonance": bam_resonance,
+            "bam_stored_pairs": len(self.bam.memory_pairs),
+        }
+
         for n, a_sc, g_sc in zip(self.nodes, anfis_scores, gp_scores):
             n.anfis_score = a_sc
             n.gp_score = g_sc
 
         target_weights = self._compute_policy_weights(self.algorithm, anfis_scores, gp_scores)
+        if self.algorithm == "fuzzload":
+            # Blend 85% ANFIS+GP weights with 15% Exponential BAM recalled prior
+            target_weights = [
+                0.85 * tw + 0.15 * bw
+                for tw, bw in zip(target_weights, bam_prior_weights)
+            ]
         ema_alpha = 0.48
         raw_smoothed = []
         for n, tw in zip(self.nodes, target_weights):
@@ -346,6 +387,13 @@ class FuzzLoadClusterController:
 
         if self.tick_count % 12 == 0:
             self.gp.evolve_generation(self.replay_buffer, generations=2)
+            # Apply FLC-GA evolved 12-bit structural rule mask & BPN weight delta to ANFIS
+            self.anfis.apply_ga_structural_tuning(
+                self.gp.best_ga_chromosome.rule_bits,
+                self.gp.best_ga_chromosome.bpn_weight_delta,
+            )
+            # Reinforce high-performing stress->weight mapping in Exponential BAM
+            self.bam.encode_pattern_pair(stress_vec, final_weights, multiplicity=1.2)
 
         if sync_go:
             self._sync_weights_to_go_proxy()
@@ -487,6 +535,7 @@ class FuzzLoadClusterController:
             "nodes": [n.to_dict() for n in self.nodes],
             "anfis": self.anfis.get_membership_curves(),
             "gp": self.gp.get_state(),
+            "art_bam": self.last_art_bam_state,
             "metrics_history": self.metrics_history,
             "benchmark": self.last_benchmark,
         }

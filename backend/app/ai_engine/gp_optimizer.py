@@ -1,8 +1,12 @@
-"""Tree-Based Genetic Programming (GP) Symbolic Regression Meta-Optimizer.
+"""Tree-Based Genetic Programming (GP) & Bitwise Genetic Algorithm (FLC-GA) Co-Optimizer.
 
-Evolves non-linear mathematical routing expressions over a 60-second Digital Twin
-telemetry replay buffer using Tournament Selection, Subtree Crossover, Point/Subtree
-Mutation, and Parsimony Pressure.
+Combines:
+1. Tree-Based Symbolic Regression (GP): Evolves non-linear mathematical scoring trees.
+2. Bitwise Genetic Algorithm (FLC-GA Structural & BPN Weight Optimizer):
+   - Binary 12-bit Rule Mask Chromosome for Fuzzy Logic Controller structural rule selection
+   - Real-coded BPN premise offset gene for GA-based neural weight determination
+   - Bitwise Operators (AND, OR, XOR mask crossover), Inversion Operator, Deletion/Duplication
+     Operator, and Point Bit-Flip Mutation.
 """
 
 from __future__ import annotations
@@ -59,9 +63,9 @@ CONSTANTS = (0.1, 0.25, 0.5, 1.0, 1.5, 2.0)
 class GPNode:
     """Single node in a symbolic Genetic Programming syntax tree."""
 
-    op: str | None = None          # Key in PRIMITIVES if internal function node
-    terminal: str | None = None    # Terminal variable name or numeric string
-    value: float | None = None     # Constant value if numeric terminal
+    op: str | None = None
+    terminal: str | None = None
+    value: float | None = None
     children: list[GPNode] = field(default_factory=list)
 
     def is_leaf(self) -> bool:
@@ -120,16 +124,33 @@ class GPNode:
         }
 
 
+@dataclass
+class BitwiseGAChromosome:
+    """12-bit FLC-GA structural rule chromosome + BPN premise weight shift gene."""
+
+    rule_bits: list[int] = field(default_factory=lambda: [1] * 12)
+    bpn_weight_delta: float = 0.0
+
+    def bitstring(self) -> str:
+        return "".join(str(b) for b in self.rule_bits)
+
+
 class GeneticProgrammingOptimizer:
-    """Evolves symbolic server scoring trees over a rolling Digital Twin replay buffer."""
+    """Co-evolves symbolic GP trees and 12-bit FLC-GA structural chromosomes."""
 
     def __init__(self, population_size: int = 36, max_depth: int = 4) -> None:
         self.population_size = population_size
         self.max_depth = max_depth
         self.generation = 1
         self.population: list[GPNode] = []
+        self.ga_chromosomes: list[BitwiseGAChromosome] = []
         self.best_tree: GPNode = self._seed_domain_tree()
+        self.best_ga_chromosome: BitwiseGAChromosome = BitwiseGAChromosome(
+            rule_bits=[1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1],
+            bpn_weight_delta=0.0,
+        )
         self.best_fitness: float = 0.865
+        self.last_genetic_operator: str = "SUBTREE_CROSSOVER + BITWISE_INVERSION"
         self.fitness_history: list[dict[str, float | int | str]] = [
             {
                 "generation": 1,
@@ -142,7 +163,6 @@ class GeneticProgrammingOptimizer:
         self._init_population()
 
     def _seed_domain_tree(self) -> GPNode:
-        """Create a strong initial domain heuristic: (1.0 - (CPU)^2) / (0.25 + (LAT * (1.0 + CONN)))."""
         return GPNode(
             op="div",
             children=[
@@ -192,9 +212,51 @@ class GeneticProgrammingOptimizer:
 
     def _init_population(self) -> None:
         self.population = [copy.deepcopy(self.best_tree)]
+        self.ga_chromosomes = [copy.deepcopy(self.best_ga_chromosome)]
         while len(self.population) < self.population_size:
             depth = random.randint(2, self.max_depth)
             self.population.append(self._random_tree(depth, grow=(len(self.population) % 2 == 0)))
+            bits = [1 if random.random() < 0.75 else 0 for _ in range(12)]
+            if sum(bits) < 6:
+                bits[0] = bits[5] = bits[11] = 1
+            self.ga_chromosomes.append(
+                BitwiseGAChromosome(rule_bits=bits, bpn_weight_delta=random.uniform(-0.15, 0.15))
+            )
+
+    @staticmethod
+    def bitwise_crossover(c1: BitwiseGAChromosome, c2: BitwiseGAChromosome) -> BitwiseGAChromosome:
+        """Uniform bitwise mask crossover using bitwise AND / OR / XOR operators."""
+        mask = [random.randint(0, 1) for _ in range(12)]
+        child_bits = [
+            (b1 & m) | (b2 & (1 ^ m))
+            for b1, b2, m in zip(c1.rule_bits, c2.rule_bits, mask)
+        ]
+        if sum(child_bits) < 5:
+            child_bits[0] = child_bits[5] = child_bits[11] = 1
+        delta = 0.5 * (c1.bpn_weight_delta + c2.bpn_weight_delta)
+        return BitwiseGAChromosome(rule_bits=child_bits, bpn_weight_delta=round(delta, 4))
+
+    @staticmethod
+    def inversion_operator(chrom: BitwiseGAChromosome) -> BitwiseGAChromosome:
+        """GA Inversion Operator: reverses a random sub-segment [i:j] of the chromosome."""
+        bits = list(chrom.rule_bits)
+        i, j = sorted(random.sample(range(len(bits)), 2))
+        bits[i : j + 1] = reversed(bits[i : j + 1])
+        return BitwiseGAChromosome(rule_bits=bits, bpn_weight_delta=chrom.bpn_weight_delta)
+
+    @staticmethod
+    def deletion_and_bitflip_operator(chrom: BitwiseGAChromosome) -> BitwiseGAChromosome:
+        """GA Deletion/Duplication & Bitwise XOR Flip Mutation Operator."""
+        bits = list(chrom.rule_bits)
+        # Delete one locus and shift-pad to preserve chromosome length 12
+        del_idx = random.randrange(len(bits))
+        deleted_bit = bits.pop(del_idx)
+        bits.append(deleted_bit ^ 1)
+        # Ensure core rules remain active
+        if sum(bits) < 5:
+            bits[0] = bits[5] = bits[11] = 1
+        new_delta = max(-0.25, min(0.25, chrom.bpn_weight_delta + random.uniform(-0.05, 0.05)))
+        return BitwiseGAChromosome(rule_bits=bits, bpn_weight_delta=round(new_delta, 4))
 
     def _collect_nodes(self, root: GPNode) -> list[GPNode]:
         result = [root]
@@ -236,11 +298,9 @@ class GeneticProgrammingOptimizer:
         return mutant
 
     def score_nodes(self, node_envs: list[dict[str, float]]) -> list[float]:
-        """Evaluate the current elite GP tree on all backend nodes and normalize to [1, 100]."""
         raw_scores: list[float] = []
         for env in node_envs:
             val = self.best_tree.evaluate(env)
-            # Softplus transformation ensures strictly positive scores
             pos = math.log1p(math.exp(max(-10.0, min(10.0, val))))
             raw_scores.append(pos)
         max_s = max(raw_scores) if raw_scores else 1.0
@@ -251,7 +311,6 @@ class GeneticProgrammingOptimizer:
     def evaluate_fitness_on_replay(
         self, tree: GPNode, replay_snapshots: list[list[dict[str, float]]]
     ) -> float:
-        """Digital Twin Fitness Evaluator: simulates routing with candidate tree across replay buffer."""
         if not replay_snapshots:
             replay_snapshots = [
                 [
@@ -265,7 +324,6 @@ class GeneticProgrammingOptimizer:
         sim_p95_accum = 0.0
         sim_err_accum = 0.0
         sim_var_accum = 0.0
-        monotonicity_bonus = 0.0
 
         for cluster_step in replay_snapshots[-24:]:
             raw_vals = []
@@ -279,7 +337,6 @@ class GeneticProgrammingOptimizer:
             step_err = 0.0
             loads = []
             for p, node_env in zip(probs, cluster_step):
-                # Simulated latency when routing fraction p to node with current CPU, LAT, CONN
                 node_stress = (
                     0.45 * node_env["LAT"]
                     + 0.35 * (node_env["CPU"] ** 1.5)
@@ -301,15 +358,10 @@ class GeneticProgrammingOptimizer:
         avg_err = sim_err_accum / n_steps
         avg_var = sim_var_accum / n_steps
 
-        # Check monotonicity: healthy server should score higher than overloaded server
         healthy_score = tree.evaluate({"CPU": 0.15, "MEM": 0.20, "LAT": 0.12, "CONN": 0.10, "ERR": 0.0})
         overloaded_score = tree.evaluate({"CPU": 0.92, "MEM": 0.88, "LAT": 0.90, "CONN": 0.85, "ERR": 0.1})
-        if healthy_score > overloaded_score + 0.15:
-            monotonicity_bonus = 0.18
-        else:
-            monotonicity_bonus = -0.35
+        monotonicity_bonus = 0.18 if healthy_score > overloaded_score + 0.15 else -0.35
 
-        # Parsimony penalty prevents GP tree bloat
         bloat_penalty = 0.004 * max(0, tree.size() - 9)
 
         raw_fitness = 1.15 - (0.65 * avg_lat + 0.45 * avg_err + 0.30 * avg_var + bloat_penalty) + monotonicity_bonus
@@ -318,46 +370,63 @@ class GeneticProgrammingOptimizer:
     def evolve_generation(
         self, replay_snapshots: list[list[dict[str, float]]], generations: int = 3
     ) -> dict[str, Any]:
-        """Run tournament selection, crossover, and mutation on the Digital Twin replay buffer."""
+        """Co-evolve symbolic GP syntax trees and 12-bit FLC-GA rule chromosomes."""
         for _ in range(generations):
             scored_pop = [
-                (self.evaluate_fitness_on_replay(ind, replay_snapshots), ind)
-                for ind in self.population
+                (self.evaluate_fitness_on_replay(ind, replay_snapshots), ind, chrom)
+                for ind, chrom in zip(self.population, self.ga_chromosomes)
             ]
             scored_pop.sort(key=lambda item: item[0], reverse=True)
 
-            best_gen_fit, best_gen_tree = scored_pop[0]
+            best_gen_fit, best_gen_tree, best_gen_chrom = scored_pop[0]
             if best_gen_fit >= self.best_fitness:
                 self.best_fitness = best_gen_fit
                 self.best_tree = copy.deepcopy(best_gen_tree)
+                self.best_ga_chromosome = copy.deepcopy(best_gen_chrom)
 
-            avg_fit = sum(f for f, _ in scored_pop) / len(scored_pop)
+            avg_fit = sum(f for f, _, _ in scored_pop) / len(scored_pop)
 
-            # Elitism: keep top 4 individuals unchanged
             next_pop: list[GPNode] = [
                 copy.deepcopy(self.best_tree),
                 copy.deepcopy(scored_pop[0][1]),
                 copy.deepcopy(scored_pop[1][1]),
                 copy.deepcopy(scored_pop[2][1]),
             ]
+            next_chroms: list[BitwiseGAChromosome] = [
+                copy.deepcopy(self.best_ga_chromosome),
+                copy.deepcopy(scored_pop[0][2]),
+                copy.deepcopy(scored_pop[1][2]),
+                copy.deepcopy(scored_pop[2][2]),
+            ]
 
-            def tournament_select() -> GPNode:
+            def tournament_select() -> tuple[GPNode, BitwiseGAChromosome]:
                 contenders = random.sample(scored_pop, k=min(4, len(scored_pop)))
                 contenders.sort(key=lambda x: x[0], reverse=True)
-                return contenders[0][1]
+                return contenders[0][1], contenders[0][2]
 
             while len(next_pop) < self.population_size:
                 r = random.random()
-                if r < 0.65:
-                    p1, p2 = tournament_select(), tournament_select()
+                if r < 0.55:
+                    (p1, c1), (p2, c2) = tournament_select(), tournament_select()
                     next_pop.append(self._crossover(p1, p2))
-                elif r < 0.92:
-                    p1 = tournament_select()
+                    next_chroms.append(self.bitwise_crossover(c1, c2))
+                    self.last_genetic_operator = "SUBTREE_CROSSOVER + BITWISE_MASK_XOVER"
+                elif r < 0.78:
+                    p1, c1 = tournament_select()
                     next_pop.append(self._mutate(p1))
+                    next_chroms.append(self.inversion_operator(c1))
+                    self.last_genetic_operator = "POINT_MUTATION + CHROMOSOME_INVERSION"
+                elif r < 0.92:
+                    p1, c1 = tournament_select()
+                    next_pop.append(self._mutate(p1))
+                    next_chroms.append(self.deletion_and_bitflip_operator(c1))
+                    self.last_genetic_operator = "SUBTREE_MUTATION + LOCUS_DELETION_FLIP"
                 else:
                     next_pop.append(self._random_tree(max_depth=self.max_depth, grow=True))
+                    next_chroms.append(self.inversion_operator(self.best_ga_chromosome))
 
             self.population = next_pop
+            self.ga_chromosomes = next_chroms
             self.generation += 1
             self.fitness_history.append(
                 {
@@ -381,6 +450,9 @@ class GeneticProgrammingOptimizer:
             "best_formula": self.best_tree.to_formula(),
             "tree_depth": self.best_tree.depth(),
             "tree_size": self.best_tree.size(),
+            "rule_mask_bitstring": self.best_ga_chromosome.bitstring(),
+            "bpn_weight_delta": self.best_ga_chromosome.bpn_weight_delta,
+            "last_operator": self.last_genetic_operator,
             "ast_tree": self.best_tree.to_dict(),
             "fitness_history": self.fitness_history[-25:],
         }

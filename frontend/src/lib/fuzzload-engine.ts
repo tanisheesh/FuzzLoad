@@ -43,7 +43,12 @@ export interface FuzzyRuleItem {
 export interface ANFISState {
   epoch: number;
   learning_rate: number;
+  momentum?: number;
   current_loss: number;
+  centroid_defuzz_score?: number;
+  active_rule_mask?: string;
+  active_rules_count?: number;
+  fuzzy_relation_matrix?: number[][];
   loss_history: { epoch: number; loss: number }[];
   curves: Record<string, MembershipPoint[]>;
   rules: FuzzyRuleItem[];
@@ -62,6 +67,9 @@ export interface GPState {
   best_formula: string;
   tree_depth: number;
   tree_size: number;
+  rule_mask_bitstring?: string;
+  bpn_weight_delta?: number;
+  last_operator?: string;
   ast_tree: GPASTNode;
   fitness_history: {
     generation: number;
@@ -70,6 +78,28 @@ export interface GPState {
     formula: string;
     tree_size: number;
   }[];
+}
+
+export interface ARTBAMState {
+  art1: {
+    signature: string;
+    matched_category: string;
+    match_ratio: number;
+    vigilance: number;
+    resonated: boolean;
+  };
+  art2: {
+    category_id: number;
+    regime_label: string;
+    similarity: number;
+    vigilance: number;
+    resonated: boolean;
+    total_categories: number;
+    hits: number;
+  };
+  bam_prior_weights: number[];
+  bam_resonance: number;
+  bam_stored_pairs: number;
 }
 
 export interface MetricPoint {
@@ -111,6 +141,7 @@ export interface FuzzLoadClusterState {
   nodes: WorkerNodeTelemetry[];
   anfis: ANFISState;
   gp: GPState;
+  art_bam?: ARTBAMState;
   metrics_history: MetricPoint[];
   benchmark: BenchmarkEntry[];
 }
@@ -375,7 +406,16 @@ export function createInitialFallbackState(): FuzzLoadClusterState {
     anfis: {
       epoch: 142,
       learning_rate: 0.015,
+      momentum: 0.35,
       current_loss: 0.0042,
+      centroid_defuzz_score: 76.4,
+      active_rule_mask: "111101111101",
+      active_rules_count: 10,
+      fuzzy_relation_matrix: [
+        [0.78, 0.34, 0.12],
+        [0.42, 0.65, 0.28],
+        [0.14, 0.31, 0.82],
+      ],
       loss_history: Array.from({ length: 24 }, (_, idx) => ({
         epoch: 119 + idx,
         loss: Number((0.018 * Math.exp(-idx * 0.06) + 0.003).toFixed(5)),
@@ -403,6 +443,9 @@ export function createInitialFallbackState(): FuzzLoadClusterState {
       best_formula: CANDIDATE_FORMULAS[0].formula,
       tree_depth: 4,
       tree_size: 11,
+      rule_mask_bitstring: "111101111101",
+      bpn_weight_delta: 0.018,
+      last_operator: "SUBTREE_CROSSOVER + BITWISE_INVERSION",
       ast_tree: CANDIDATE_FORMULAS[0].tree,
       fitness_history: Array.from({ length: 18 }, (_, i) => ({
         generation: i + 1,
@@ -411,6 +454,27 @@ export function createInitialFallbackState(): FuzzLoadClusterState {
         formula: CANDIDATE_FORMULAS[0].formula,
         tree_size: 11,
       })),
+    },
+    art_bam: {
+      art1: {
+        signature: "0000",
+        matched_category: "NOMINAL_BINARY_STATE",
+        match_ratio: 1.0,
+        vigilance: 0.7,
+        resonated: true,
+      },
+      art2: {
+        category_id: 1,
+        regime_label: "REGIME_01 // BALANCED_STEADY",
+        similarity: 0.964,
+        vigilance: 0.86,
+        resonated: true,
+        total_categories: 4,
+        hits: 24,
+      },
+      bam_prior_weights: [0.44, 0.23, 0.24, 0.09],
+      bam_resonance: 0.912,
+      bam_stored_pairs: 6,
     },
     metrics_history: Array.from({ length: 24 }, (_, i) => ({
       tick: i + 1,
@@ -651,6 +715,12 @@ export function stepClientSimulation(prev: FuzzLoadClusterState): FuzzLoadCluste
     Math.max(0.0018, prev.anfis.current_loss * 0.985 + (Math.random() - 0.48) * 0.0004).toFixed(5)
   );
 
+  const hasCpuFault = finalNodes.some((n) => n.chaos.cpu_spike || n.cpu_usage > 0.78);
+  const hasMemFault = finalNodes.some((n) => n.chaos.mem_leak || n.mem_usage > 0.78);
+  const hasIoFault = finalNodes.some((n) => n.chaos.io_lag || n.p95_latency_ms > 95);
+  const hasErrFault = finalNodes.some((n) => n.chaos.offline || n.error_rate > 0.02);
+  const binSig = `${hasCpuFault ? 1 : 0}${hasMemFault ? 1 : 0}${hasIoFault ? 1 : 0}${hasErrFault ? 1 : 0}`;
+
   return {
     ...prev,
     tick: nextTick,
@@ -662,7 +732,34 @@ export function stepClientSimulation(prev: FuzzLoadClusterState): FuzzLoadCluste
       ...prev.anfis,
       epoch: nextEpoch,
       current_loss: nextLoss,
+      centroid_defuzz_score: Number((finalNodes[0].anfis_score * 0.88).toFixed(1)),
       loss_history: [...prev.anfis.loss_history.slice(-29), { epoch: nextEpoch, loss: nextLoss }],
+    },
+    art_bam: {
+      art1: {
+        signature: binSig,
+        matched_category:
+          binSig === "0000"
+            ? "NOMINAL_BINARY_STATE"
+            : hasIoFault
+            ? "IO_STALL_SIGNATURE"
+            : "COMPUTE_PRESSURE_SIGNATURE",
+        match_ratio: 0.95,
+        vigilance: 0.7,
+        resonated: true,
+      },
+      art2: {
+        category_id: anyChaos ? 3 : 1,
+        regime_label: anyChaos ? "REGIME_03 // IO_LATENCY_STALL" : "REGIME_01 // BALANCED_STEADY",
+        similarity: anyChaos ? 0.918 : 0.964,
+        vigilance: 0.86,
+        resonated: true,
+        total_categories: 4,
+        hits: (prev.art_bam?.art2.hits ?? 20) + 1,
+      },
+      bam_prior_weights: finalNodes.map((n) => Number(n.routing_weight.toFixed(2))),
+      bam_resonance: anyChaos ? 0.884 : 0.932,
+      bam_stored_pairs: 6,
     },
     metrics_history: [...prev.metrics_history.slice(-39), newMetric],
   };

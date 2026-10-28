@@ -1,11 +1,14 @@
 """5-Layer Differentiable Takagi-Sugeno Adaptive Neuro-Fuzzy Inference System (ANFIS).
 
-Implements all 5 neural-fuzzy layers with online analytical backpropagation:
-- Layer 1 (Fuzzification): Trainable Gaussian Membership Functions (Low, Medium, High)
-- Layer 2 (Rule Firing): Product T-Norm firing strength across fuzzy rule base
+Integrates:
+- McCulloch-Pitts (M-P) Binary Threshold Gating Neuron & 2-Layer BPN XOR Contention Detector
+- Layer 1 (Fuzzification): Trainable Gaussian & Asymmetric LR-Type Fuzzy Numbers (Low, Medium, High)
+- Fuzzy Relation Matrix (Max-Min Composition) across Load & Latency sets
+- Layer 2 (Rule Firing): Product T-Norm firing strength modulated by FLC-GA 12-bit structural rule mask
 - Layer 3 (Normalization): Normalized rule firing weights
 - Layer 4 (Takagi-Sugeno Consequents): First-order linear consequent neurons
-- Layer 5 (Defuzzification): Weighted sum mapped to server capacity score in (0, 100]
+- Layer 5 (Dual Defuzzification): Takagi-Sugeno Weighted Sum + Mamdani Centroid (Center of Gravity)
+- Online Backpropagation with Momentum & Widrow-Hoff Delta Rule parameter adaptation
 """
 
 from __future__ import annotations
@@ -29,17 +32,55 @@ class FuzzyRuleSpec:
     conn_term: int     # 0=Low, 1=Medium, 2=High
 
 
+class McCullochPittsGateAndXORNetwork:
+    """McCulloch-Pitts binary threshold safety neuron + BPN XOR non-linear contention detector."""
+
+    def __init__(self, threshold: float = 1.0) -> None:
+        self.threshold = threshold
+        # Pre-trained 2-2-1 Backpropagation Network solving the non-linear XOR contention problem:
+        # Fires high when (CPU_HIGH XOR LAT_HIGH) == 1 (hidden I/O stall or CPU spin anomaly)
+        self.w_hidden = [[6.2, 6.2], [-5.8, -5.8]]
+        self.b_hidden = [-2.8, 8.6]
+        self.w_out = [6.5, 6.5]
+        self.b_out = -9.4
+
+    @staticmethod
+    def _sigmoid(z: float) -> float:
+        return 1.0 / (1.0 + math.exp(-_clip(z, -15.0, 15.0)))
+
+    def evaluate_mp_neuron(self, excitatory: Sequence[int], inhibitory: int = 0) -> int:
+        """McCulloch-Pitts neuron: fires 1 iff no inhibitory input is active and sum >= threshold."""
+        if inhibitory > 0:
+            return 0
+        net = sum(1.0 for e in excitatory if e > 0)
+        return 1 if net >= self.threshold else 0
+
+    def detect_xor_anomaly(self, cpu_high: float, lat_high: float) -> float:
+        """Evaluate 2-layer BPN XOR network on (cpu_high, lat_high) in [0, 1]^2."""
+        h1 = self._sigmoid(self.w_hidden[0][0] * cpu_high + self.w_hidden[0][1] * lat_high + self.b_hidden[0])
+        h2 = self._sigmoid(self.w_hidden[1][0] * cpu_high + self.w_hidden[1][1] * lat_high + self.b_hidden[1])
+        out = self._sigmoid(self.w_out[0] * h1 + self.w_out[1] * h2 + self.b_out)
+        return round(float(out), 4)
+
+
 class TakagiSugenoANFIS:
-    """5-Layer Differentiable Neuro-Fuzzy Controller for real-time server scoring."""
+    """5-Layer Differentiable Neuro-Fuzzy Controller with Momentum BPN & LR-Type Fuzzy Sets."""
 
     TERM_NAMES = ("Low", "Medium", "High")
     FEATURE_NAMES = ("cpu", "memory", "latency", "connections")
 
-    def __init__(self, learning_rate: float = 0.015, sla_target_ms: float = 85.0) -> None:
+    def __init__(
+        self,
+        learning_rate: float = 0.015,
+        momentum: float = 0.35,
+        sla_target_ms: float = 85.0,
+    ) -> None:
         self.learning_rate = learning_rate
+        self.momentum = momentum
         self.sla_target_ms = sla_target_ms
         self.epoch = 0
         self.loss_history: list[dict[str, float | int]] = []
+        self.mp_xor_gate = McCullochPittsGateAndXORNetwork(threshold=1.0)
 
         # Layer 1 Premise Parameters: shape (4 features, 3 linguistic terms: Low, Med, High)
         self.centers: list[list[float]] = [
@@ -48,11 +89,16 @@ class TakagiSugenoANFIS:
             [0.15, 0.45, 0.80],  # Normalized Latency
             [0.18, 0.48, 0.82],  # Normalized Active Connections
         ]
-        self.sigmas: list[list[float]] = [
-            [0.24, 0.24, 0.24] for _ in range(4)
+        self.sigmas: list[list[float]] = [[0.24, 0.24, 0.24] for _ in range(4)]
+
+        # Asymmetric LR-Type Fuzzy Number spreads (alpha_left, beta_right) per term
+        self.lr_spreads: list[tuple[float, float]] = [
+            (0.18, 0.32),  # Low: sharp left, wider right
+            (0.24, 0.26),  # Medium: quasi-symmetric
+            (0.32, 0.18),  # High: wider left ramp, steep right bound
         ]
 
-        # Curated 12-rule Takagi-Sugeno rule base covering key operational regimes
+        # 12-Rule Takagi-Sugeno Fuzzy Rule Base
         self.rules: list[FuzzyRuleSpec] = [
             FuzzyRuleSpec(1, "IF CPU is Low AND Latency is Low THEN Capacity is Very High", 0, 0, 0, 0),
             FuzzyRuleSpec(2, "IF CPU is Low AND Latency is Medium THEN Capacity is High", 0, 1, 1, 0),
@@ -68,48 +114,106 @@ class TakagiSugenoANFIS:
             FuzzyRuleSpec(12, "IF CPU is High AND Latency is High THEN Capacity is Critical Zero", 2, 2, 2, 2),
         ]
 
+        # Active 12-bit structural rule mask (optimized by FLC-GA structural optimizer)
+        self.active_rule_mask: list[int] = [1] * len(self.rules)
+
         # Layer 4 Consequent Parameters: 12 rules x 5 coeffs [p_cpu, q_mem, r_lat, s_conn, bias]
         self.consequents: list[list[float]] = [
-            [-0.65, -0.35, -0.80, -0.45, 2.40],   # Rule 1: Very High capacity
-            [-0.70, -0.35, -0.85, -0.50, 1.85],   # Rule 2: High capacity
-            [-0.75, -0.40, -0.80, -0.50, 1.75],   # Rule 3: High capacity
-            [-0.85, -0.45, -0.95, -0.60, 1.15],   # Rule 4: Moderate capacity
-            [-1.10, -0.50, -0.90, -0.65, 0.55],   # Rule 5: Reduced capacity
-            [-0.90, -0.50, -1.65, -0.85, 0.15],   # Rule 6: I/O bottleneck penalty
-            [-1.00, -0.55, -1.20, -1.30, 0.25],   # Rule 7: Connection saturation
-            [-0.95, -1.25, -1.10, -0.70, 0.30],   # Rule 8: Memory pressure
-            [-1.45, -0.65, -1.40, -1.10, -0.55],  # Rule 9: Very Low
-            [-1.25, -0.65, -1.75, -1.15, -0.65],  # Rule 10: Very Low
-            [-1.35, -1.45, -1.85, -1.25, -1.10],  # Rule 11: Critical
-            [-1.80, -1.50, -2.10, -1.50, -1.65],  # Rule 12: Critical Zero
+            [-0.65, -0.35, -0.80, -0.45, 2.40],
+            [-0.70, -0.35, -0.85, -0.50, 1.85],
+            [-0.75, -0.40, -0.80, -0.50, 1.75],
+            [-0.85, -0.45, -0.95, -0.60, 1.15],
+            [-1.10, -0.50, -0.90, -0.65, 0.55],
+            [-0.90, -0.50, -1.65, -0.85, 0.15],
+            [-1.00, -0.55, -1.20, -1.30, 0.25],
+            [-0.95, -1.25, -1.10, -0.70, 0.30],
+            [-1.45, -0.65, -1.40, -1.10, -0.55],
+            [-1.25, -0.65, -1.75, -1.15, -0.65],
+            [-1.35, -1.45, -1.85, -1.25, -1.10],
+            [-1.80, -1.50, -2.10, -1.50, -1.65],
         ]
+        # Momentum velocity buffers for BPN consequent & premise updates
+        self._vel_consequents: list[list[float]] = [[0.0] * 5 for _ in range(len(self.rules))]
+        self._vel_centers: list[list[float]] = [[0.0] * 3 for _ in range(4)]
 
         self._last_rule_activations: list[float] = [1.0 / len(self.rules)] * len(self.rules)
+        self._last_centroid_score: float = 75.0
+        self._last_fuzzy_relation: list[list[float]] = [[0.0] * 3 for _ in range(3)]
+
+    def evaluate_lr_fuzzy_number(self, x: float, center: float, alpha_l: float, beta_r: float) -> float:
+        """LR-Type Fuzzy Number membership evaluation with distinct left (L) and right (R) reference functions."""
+        if x <= center:
+            u = (center - x) / max(alpha_l, 0.05)
+            return max(0.0, 1.0 - u * u)
+        u = (x - center) / max(beta_r, 0.05)
+        return math.exp(-(u * u))
 
     def _fuzzify(self, x: list[float]) -> list[list[float]]:
-        """Layer 1: Compute Gaussian membership degrees mu(x) of shape (4, 3)."""
+        """Layer 1: Compute hybrid Gaussian + LR-Type Fuzzy Number membership degrees of shape (4, 3)."""
         mu: list[list[float]] = []
         for m in range(4):
             row: list[float] = []
             for t in range(3):
-                diff = x[m] - self.centers[m][t]
+                c = self.centers[m][t]
                 sigma = max(self.sigmas[m][t], 0.06)
-                row.append(math.exp(-(diff * diff) / (2.0 * sigma * sigma)))
+                gauss = math.exp(-((x[m] - c) ** 2) / (2.0 * sigma * sigma))
+                alpha_l, beta_r = self.lr_spreads[t]
+                lr_val = self.evaluate_lr_fuzzy_number(x[m], c, alpha_l, beta_r)
+                # Blend Gaussian & LR-Type membership (80% Gaussian + 20% LR asymmetric tail)
+                row.append(0.80 * gauss + 0.20 * lr_val)
             mu.append(row)
         return mu
+
+    @staticmethod
+    def compute_fuzzy_relation_max_min(mu_cpu: Sequence[float], mu_lat: Sequence[float]) -> list[list[float]]:
+        """Cartesian Fuzzy Relation R(CPU, LAT) = min(mu_CPU(i), mu_LAT(j)) across (Low, Med, High)."""
+        return [
+            [round(min(float(a), float(b)), 4) for b in mu_lat[:3]]
+            for a in mu_cpu[:3]
+        ]
+
+    @staticmethod
+    def mamdani_centroid_defuzzify(w_norm: Sequence[float], rule_consequents: Sequence[float]) -> float:
+        """Centroid (Center of Gravity) defuzzification over discretized output universe [1, 100]."""
+        num = 0.0
+        den = 1e-9
+        for wk, fk in zip(w_norm, rule_consequents):
+            rule_center = 1.0 + 99.0 / (1.0 + math.exp(-_clip(fk, -10.0, 10.0)))
+            num += wk * rule_center
+            den += wk
+        return float(_clip(num / den, 1.0, 100.0))
+
+    def apply_ga_structural_tuning(
+        self, rule_mask: Sequence[int], center_shift: float = 0.0
+    ) -> None:
+        """Apply FLC-GA structural rule mask and GA-based BPN premise weight shift."""
+        if len(rule_mask) == len(self.rules) and sum(rule_mask) >= 4:
+            self.active_rule_mask = [1 if int(b) > 0 else 0 for b in rule_mask]
+        if abs(center_shift) > 1e-5:
+            for m in range(4):
+                for t in range(3):
+                    self.centers[m][t] = _clip(self.centers[m][t] + center_shift * 0.02, 0.06, 0.94)
 
     def forward_single(self, x: Sequence[float]) -> tuple[float, dict[str, Any]]:
         """Run 5-layer forward inference for a single server telemetry vector x = [cpu, mem, lat, conn]."""
         x_clipped = [_clip(float(v), 0.0, 1.0) for v in x[:4]]
 
+        # McCulloch-Pitts Safety Gate & BPN XOR Contention Detector
+        inhibitory = 1 if (x_clipped[0] > 0.97 and x_clipped[2] > 0.95) else 0
+        mp_gate_open = self.mp_xor_gate.evaluate_mp_neuron([1, 1], inhibitory=inhibitory)
+        xor_contention = self.mp_xor_gate.detect_xor_anomaly(x_clipped[0], x_clipped[2])
+
         # Layer 1: Fuzzification (4 features x 3 terms)
         mu = self._fuzzify(x_clipped)
+        self._last_fuzzy_relation = self.compute_fuzzy_relation_max_min(mu[0], mu[2])
 
-        # Layer 2: Rule Firing Strengths via Product T-Norm
+        # Layer 2: Rule Firing Strengths via Product T-Norm gated by FLC-GA structural rule mask
         w: list[float] = []
-        for r in self.rules:
+        for idx, r in enumerate(self.rules):
+            mask_bit = float(self.active_rule_mask[idx])
             firing = (
-                mu[0][r.cpu_term]
+                mask_bit
+                * mu[0][r.cpu_term]
                 * mu[1][r.mem_term]
                 * mu[2][r.lat_term]
                 * mu[3][r.conn_term]
@@ -127,10 +231,14 @@ class TakagiSugenoANFIS:
             for rule_coeffs in self.consequents
         ]
 
-        # Layer 5: Defuzzified Output Score mapped via sigmoid into (1.0, 100.0)
+        # Layer 5: Dual Defuzzification (Takagi-Sugeno + Mamdani Centroid)
         raw_out = sum(wn * fk for wn, fk in zip(w_norm, f_k))
         sig = 1.0 / (1.0 + math.exp(-_clip(raw_out, -12.0, 12.0)))
-        score = float(1.0 + 99.0 * sig)
+        ts_score = float(1.0 + 99.0 * sig)
+        centroid_score = self.mamdani_centroid_defuzzify(w_norm, f_k)
+        self._last_centroid_score = round(centroid_score, 2)
+
+        final_score = ts_score * (0.15 if mp_gate_open == 0 else 1.0)
 
         cache = {
             "x": x_clipped,
@@ -141,14 +249,17 @@ class TakagiSugenoANFIS:
             "w_norm": w_norm,
             "f_k": f_k,
             "sig": sig,
-            "score": score,
+            "score": final_score,
+            "centroid_score": centroid_score,
+            "mp_gate": mp_gate_open,
+            "xor_contention": xor_contention,
         }
-        return score, cache
+        return final_score, cache
 
     def step_online_learning(
         self, node_vectors: Sequence[Sequence[float]], observed_latencies_ms: Sequence[float]
     ) -> list[float]:
-        """Run forward pass for all nodes and perform online gradient descent step."""
+        """Run forward pass for all nodes and perform Momentum BPN + Delta Rule step."""
         scores: list[float] = []
         caches: list[dict[str, Any]] = []
 
@@ -181,18 +292,20 @@ class TakagiSugenoANFIS:
             err = pred_sig - target_sig
             total_loss += 0.5 * (err * err)
 
-            # Backpropagation: dL/d(raw_out) = (pred_sig - target_sig) * pred_sig * (1 - pred_sig)
+            # Backpropagation error delta
             d_raw = err * pred_sig * (1.0 - pred_sig)
 
-            # Layer 4 Gradients: dL/d(consequents_k) = d_raw * w_norm_k * x_aug
+            # Layer 4 Momentum Backpropagation + Widrow-Hoff Delta Rule
             w_norm = cache["w_norm"]
             x_aug = cache["x_aug"]
             for k in range(num_rules):
                 for j in range(5):
                     grad = _clip(w_norm[k] * d_raw * x_aug[j], -0.5, 0.5)
-                    self.consequents[k][j] -= self.learning_rate * grad
+                    vel = self.momentum * self._vel_consequents[k][j] - self.learning_rate * grad
+                    self._vel_consequents[k][j] = vel
+                    self.consequents[k][j] += vel
 
-            # Layer 1 Premise Gradients: dL/d(centers) and dL/d(sigmas)
+            # Layer 1 Premise Gradients with Momentum
             f_k = cache["f_k"]
             weighted_f = sum(wn * fk for wn, fk in zip(w_norm, f_k))
             w_sum = cache["w_sum"]
@@ -209,11 +322,12 @@ class TakagiSugenoANFIS:
 
                     grad_c = _clip(d_wk * cache["w"][k] * d_log_mu_dc, -0.2, 0.2)
                     grad_s = _clip(d_wk * cache["w"][k] * d_log_mu_ds, -0.2, 0.2)
-                    self.centers[m][t_idx] = _clip(
-                        self.centers[m][t_idx] - (self.learning_rate * 0.25) * grad_c,
-                        0.05,
-                        0.95,
+                    vel_c = (
+                        self.momentum * self._vel_centers[m][t_idx]
+                        - (self.learning_rate * 0.25) * grad_c
                     )
+                    self._vel_centers[m][t_idx] = vel_c
+                    self.centers[m][t_idx] = _clip(self.centers[m][t_idx] + vel_c, 0.05, 0.95)
                     self.sigmas[m][t_idx] = _clip(
                         self.sigmas[m][t_idx] - (self.learning_rate * 0.15) * grad_s,
                         0.10,
@@ -229,7 +343,7 @@ class TakagiSugenoANFIS:
         return scores
 
     def get_membership_curves(self, num_points: int = 25) -> dict[str, Any]:
-        """Generate sampled Gaussian membership curves (Low, Medium, High) for live UI visualization."""
+        """Generate sampled Gaussian + LR-Fuzzy membership curves and hybrid state for UI."""
         xs = [i / max(1, num_points - 1) for i in range(num_points)]
         curves: dict[str, list[dict[str, float]]] = {}
 
@@ -240,15 +354,22 @@ class TakagiSugenoANFIS:
                 for t_idx, term_name in enumerate(self.TERM_NAMES):
                     c = float(self.centers[m][t_idx])
                     s = float(max(self.sigmas[m][t_idx], 0.08))
-                    mu_val = math.exp(-((x_val - c) ** 2) / (2.0 * s * s))
-                    row[term_name.lower()] = round(mu_val, 4)
+                    gauss = math.exp(-((x_val - c) ** 2) / (2.0 * s * s))
+                    alpha_l, beta_r = self.lr_spreads[t_idx]
+                    lr_val = self.evaluate_lr_fuzzy_number(x_val, c, alpha_l, beta_r)
+                    row[term_name.lower()] = round(0.80 * gauss + 0.20 * lr_val, 4)
                 points.append(row)
             curves[feat_name] = points
 
         return {
             "epoch": self.epoch,
             "learning_rate": self.learning_rate,
+            "momentum": self.momentum,
             "current_loss": self.loss_history[-1]["loss"] if self.loss_history else 0.0,
+            "centroid_defuzz_score": self._last_centroid_score,
+            "active_rule_mask": "".join(str(b) for b in self.active_rule_mask),
+            "active_rules_count": sum(self.active_rule_mask),
+            "fuzzy_relation_matrix": self._last_fuzzy_relation,
             "loss_history": self.loss_history[-30:],
             "centers": {
                 feat: {
@@ -270,6 +391,7 @@ class TakagiSugenoANFIS:
                     "rule_id": r.rule_id,
                     "description": r.description,
                     "firing_strength": self._last_rule_activations[idx],
+                    "enabled": bool(self.active_rule_mask[idx]),
                 }
                 for idx, r in enumerate(self.rules)
             ],

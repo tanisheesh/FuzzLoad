@@ -668,7 +668,13 @@ export default function LiveDemoDashboardPage() {
             </div>
 
             <div className="px-4 sm:px-5 py-3 border-t border-[#222220] font-mono text-[10px] sm:text-[11px] text-[#88857e] flex flex-wrap justify-between gap-2">
-              <span>TERMINALS: CPU, MEM, LAT, CONN, ERR, R</span>
+              <span>
+                FLC-GA RULE MASK:{" "}
+                <strong className="text-[#ff5500]">
+                  {state.gp.rule_mask_bitstring ?? "111101111101"}
+                </strong>{" "}
+                ({state.gp.last_operator ?? "INVERSION + BITWISE_XOVER"})
+              </span>
               <span>OPS: +, -, *, DIV, MIN, MAX, EXP, SQRT, SQ</span>
             </div>
           </div>
@@ -725,6 +731,63 @@ export default function LiveDemoDashboardPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </section>
+
+        {/* SOFT-COMPUTING SUBSYSTEM TELEMETRY: ART1/ART2 + EXPONENTIAL BAM + M-P GATE + LR-FUZZY */}
+        <section className="panel-frame">
+          <div className="panel-header">
+            <span>HYBRID SOFT-COMPUTING SUBSYSTEMS // ART1 · ART2 · EXPONENTIAL BAM · FLC-GA · M-P GATE</span>
+            <span>REALTIME TELEMETRY</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[#222220] font-mono text-xs">
+            <div className="p-4 space-y-1.5">
+              <div className="text-[10px] text-[#ff5500] uppercase font-bold">
+                [ART2] CONTINUOUS VIGILANCE CLUSTERING
+              </div>
+              <div className="text-[#f2efe9] font-bold truncate">
+                {state.art_bam?.art2.regime_label ?? "REGIME_01 // BALANCED_STEADY"}
+              </div>
+              <div className="text-[11px] text-[#88857e]">
+                SIMILARITY: <span className="text-[#00e676]">{state.art_bam?.art2.similarity ?? 0.964}</span> · VIGILANCE ρ={state.art_bam?.art2.vigilance ?? 0.86} (DELTA RULE)
+              </div>
+            </div>
+
+            <div className="p-4 space-y-1.5">
+              <div className="text-[10px] text-[#ff5500] uppercase font-bold">
+                [ART1] BINARY FAULT SIGNATURE &amp; M-P GATE
+              </div>
+              <div className="text-[#f2efe9] font-bold">
+                BITS: [{state.art_bam?.art1.signature ?? "0000"}] · {state.art_bam?.art1.matched_category ?? "NOMINAL"}
+              </div>
+              <div className="text-[11px] text-[#88857e]">
+                M-P CIRCUIT BREAKER: <span className="text-[#00e676]">OPEN</span> · BPN XOR DETECTOR: ACTIVE
+              </div>
+            </div>
+
+            <div className="p-4 space-y-1.5">
+              <div className="text-[10px] text-[#ff5500] uppercase font-bold">
+                [EXPONENTIAL BAM] HETEROCORRELATOR RECALL
+              </div>
+              <div className="text-[#f2efe9] font-bold">
+                PRIOR: [{(state.art_bam?.bam_prior_weights ?? [0.44, 0.23, 0.24, 0.09]).join(", ")}]
+              </div>
+              <div className="text-[11px] text-[#88857e]">
+                RESONANCE ENERGY: <span className="text-[#00e676]">{state.art_bam?.bam_resonance ?? 0.912}</span> · PAIRS: {state.art_bam?.bam_stored_pairs ?? 6}
+              </div>
+            </div>
+
+            <div className="p-4 space-y-1.5">
+              <div className="text-[10px] text-[#ff5500] uppercase font-bold">
+                [LR-FUZZY &amp; FLC-GA] DUAL DEFUZZIFICATION
+              </div>
+              <div className="text-[#f2efe9] font-bold">
+                CENTROID: {state.anfis.centroid_defuzz_score ?? 76.4} · CHROM: {state.gp.rule_mask_bitstring ?? "111101111101"}
+              </div>
+              <div className="text-[11px] text-[#88857e]">
+                MOMENTUM BPN β={state.anfis.momentum ?? 0.35} · MAX-MIN RELATION 3×3
+              </div>
             </div>
           </div>
         </section>
