@@ -153,7 +153,7 @@ export default function LandingPage() {
                 <div className="text-[10px] text-[#ff5500] uppercase tracking-wider">
                   ACTIVE EVOLVED GP EXPRESSION [GEN #18 · FIT 0.914]
                 </div>
-                <div className="text-[#00e676] text-[11px] sm:text-xs overflow-x-auto whitespace-nowrap pb-1">
+                <div className="text-[#00e676] text-[11px] sm:text-xs overflow-x-auto custom-scrollbar whitespace-nowrap pb-1">
                   Φ(x) = (1.00 - CPU²) / (0.25 + LAT × (1.00 + CONN))
                 </div>
               </div>
@@ -276,14 +276,14 @@ export default function LandingPage() {
                 ))}
               </div>
 
-              <div className="relative border border-[#222220] bg-[#0b0b0b] p-3.5 sm:p-4 font-mono text-[11px] sm:text-xs text-[#f2efe9] overflow-x-auto">
+              <div className="relative border border-[#222220] bg-[#0b0b0b] p-3.5 sm:p-4 font-mono text-[11px] sm:text-xs text-[#f2efe9] overflow-x-auto custom-scrollbar">
                 <button
                   onClick={handleCopy}
                   className="float-right ml-2 mb-2 px-2.5 py-1 border border-[#3a3834] bg-[#151515] text-[10px] font-mono uppercase text-[#f2efe9] hover:border-[#ff5500] cursor-pointer"
                 >
                   {copied ? "COPIED" : "COPY"}
                 </button>
-                <pre className="leading-relaxed overflow-x-auto">{QUICKSTART_TABS[activeTab].code}</pre>
+                <pre className="leading-relaxed overflow-x-auto custom-scrollbar">{QUICKSTART_TABS[activeTab].code}</pre>
               </div>
             </div>
 
@@ -305,7 +305,7 @@ export default function LandingPage() {
                 VERIFIED LATENCY BENCHMARK
               </h2>
 
-              <div className="border border-[#222220] overflow-x-auto">
+              <div className="border border-[#222220] overflow-x-auto custom-scrollbar">
                 <table className="w-full min-w-[420px] text-left font-mono text-[11px] sm:text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-[#222220] bg-[#0b0b0b] text-[#88857e] text-[10px] sm:text-[11px]">

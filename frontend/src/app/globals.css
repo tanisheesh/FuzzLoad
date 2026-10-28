@@ -141,3 +141,51 @@ body {
     font-size: 11px;
   }
 }
+
+/* Custom Industrial Brutalist Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3a3834 #0b0b0b;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0b0b0b;
+  border-left: 1px solid #222220;
+  border-top: 1px solid #222220;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3a3834;
+  border: 1px solid #222220;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #ff5500;
+}
+
+::-webkit-scrollbar-corner {
+  background: #0b0b0b;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #ff5500 #080808;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #080808;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #ff5500;
+}

@@ -72,6 +72,18 @@ class GPEvolveRequest(BaseModel):
     generations: int = Field(default=5, ge=1, le=20)
 
 
+class ProbeTargetItem(BaseModel):
+    id: str
+    name: str
+    url: str
+    cores: float = Field(default=2.0, ge=0.5, le=64.0)
+
+
+class ProxyProbeRequest(BaseModel):
+    requestsPerTarget: int = Field(default=3, ge=1, le=10)
+    targets: list[ProbeTargetItem]
+
+
 @app.get("/api/health")
 def get_health() -> dict[str, Any]:
     return {
@@ -122,6 +134,67 @@ def evolve_gp(req: GPEvolveRequest) -> dict[str, Any]:
 def run_benchmark() -> dict[str, Any]:
     results = controller.run_comparative_benchmark()
     return {"status": "completed", "benchmark": results}
+
+
+@app.post("/api/proxy/probe")
+def probe_upstreams(req: ProxyProbeRequest) -> dict[str, Any]:
+    import math
+    import time
+    import urllib.request
+
+    probed = []
+    for t in req.targets[:8]:
+        samples: list[float] = []
+        status_code = 0
+        errors = 0
+        for _ in range(req.requestsPerTarget):
+            t0 = time.perf_counter()
+            try:
+                http_req = urllib.request.Request(
+                    t.url,
+                    headers={"User-Agent": "FuzzLoad-Control-Plane/1.0"},
+                    method="GET",
+                )
+                with urllib.request.urlopen(http_req, timeout=5.0) as resp:
+                    _ = resp.read(4096)
+                    status_code = resp.status
+                samples.append((time.perf_counter() - t0) * 1000.0)
+            except Exception:
+                samples.append(max((time.perf_counter() - t0) * 1000.0, 800.0))
+                errors += 1
+
+        samples.sort()
+        p50 = samples[len(samples) // 2] if samples else 0.0
+        p95 = samples[-1] if samples else 0.0
+        err_rate = errors / max(1, req.requestsPerTarget)
+        norm_lat = min(1.0, p95 / 600.0)
+        est_cpu = min(0.95, 0.15 + norm_lat * 0.65 + err_rate * 0.5)
+        a_sc, _ = controller.anfis.forward_single([est_cpu, 0.30, norm_lat, 0.25])
+        g_sc = controller.gp.score_nodes(
+            [{"CPU": est_cpu, "MEM": 0.30, "LAT": norm_lat, "CONN": 0.25, "ERR": err_rate, "CAP": t.cores}]
+        )[0]
+        raw_w = ((0.58 * a_sc + 0.42 * g_sc) ** 1.85) * math.sqrt(max(1.0, t.cores) / 2.0)
+        probed.append(
+            {
+                "id": t.id,
+                "name": t.name,
+                "url": t.url,
+                "cores": t.cores,
+                "statusCode": status_code,
+                "p50LatencyMs": round(p50, 1),
+                "p95LatencyMs": round(p95, 1),
+                "errorRate": round(err_rate, 3),
+                "anfisScore": round(a_sc, 1),
+                "gpScore": round(g_sc, 1),
+                "rawWeight": 0.01 if errors == req.requestsPerTarget else raw_w,
+            }
+        )
+
+    tot_w = sum(item["rawWeight"] for item in probed) or 1.0
+    for item in probed:
+        item["assignedWeightPct"] = max(1, round((item["rawWeight"] / tot_w) * 100))
+
+    return {"status": "ok", "targets": probed}
 
 
 @app.websocket("/ws/telemetry")

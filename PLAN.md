@@ -116,12 +116,12 @@ FuzzLoad/
 
 | Phase | Deliverable | Status |
 |---|---|---|
-| **Phase 1** | Core 5-Layer ANFIS Engine (`anfis.py`) + Tree-Based GP Symbolic Optimizer (`gp_optimizer.py`) | ✅ Done |
+| **Phase 1** | Core 5-Layer ANFIS Engine (`anfis.py`), Symbolic GP + Bitwise FLC-GA (`gp_optimizer.py`), and ART1/ART2 + Exponential BAM (`art_bam_memory.py`) | ✅ Done |
 | **Phase 2** | Go Data Plane Reverse Proxy (`proxy-go/`) + Multi-Node Worker Pool | ✅ Done |
-| **Phase 3** | Separate Product Landing Page (`/`) from Live Demo (`/dashboard`), Playground (`/playground`), and Deep-Dive (`/how-it-works`) | 🚀 In Progress |
-| **Phase 4** | Add Real Upstream Prober API (`/api/proxy/probe`), AI SRE Event Narrator, and CSV/JSON/LaTeX Benchmark Exporter | 🚀 In Progress |
-| **Phase 5** | Add `fuzzload` Python SDK/CLI (`backend/app/cli.py`) + Reproducible Benchmark Suite (`bench/README.md`) | 🚀 In Progress |
-| **Phase 6** | Verify all tests (`pytest`, `tsc --noEmit`, `next build`) & commit cleanly in `setup-toolkit` format | 🚀 Next |
+| **Phase 3** | Separate Product Landing Page (`/`), Live Demo (`/dashboard`), Playground (`/playground`), and Deep-Dive (`/how-it-works`) | ✅ Done |
+| **Phase 4** | Add Real Upstream Prober API (`/api/probe` & `/api/proxy/probe`), AI SRE Event Narrator, and CSV/JSON/LaTeX Benchmark Exporters | ✅ Done |
+| **Phase 5** | Add `fuzzload` CLI/Router (`backend/app/cli.py`) + Reproducible Benchmark Suite (`bench/README.md`) | ✅ Done |
+| **Phase 6** | Full Mobile-to-4K Responsiveness, Custom Scrollbars, SEO/OG Metadata, Tests (`pytest`, `tsc`, `next build`), and Live Deployment (`https://fuzzload.tanisheesh.in`) | ✅ Done |
 
 ---
 
