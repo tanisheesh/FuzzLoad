@@ -72,6 +72,7 @@ export default function ProxyPlaygroundPage() {
   const [newCores, setNewCores] = useState(2);
   const [burstRequests, setBurstRequests] = useState(3);
   const [isProbing, setIsProbing] = useState(false);
+  const [configTab, setConfigTab] = useState<"cli" | "json" | "docker" | "python">("cli");
   const [copiedConfig, setCopiedConfig] = useState(false);
   const [probeLogs, setProbeLogs] = useState<string[]>([
     "[PROBER INIT] Paste any public HTTPS URL or API endpoint above and click '+ ADD TARGET' to include it in the pool.",
@@ -172,8 +173,43 @@ export default function ProxyPlaygroundPage() {
 
   const cliCommand = `fuzzload start \\\n  --upstreams "${upstreams.map((u) => u.url).join(",")}" \\\n  --weights "${upstreams.map((u) => (u.assignedWeightPct / 100).toFixed(2)).join(",")}" \\\n  --policy fuzzload \\\n  --port 8080`;
 
+  const jsonConfig = JSON.stringify(
+    {
+      policy: "fuzzload",
+      anfis_learning_rate: 0.015,
+      blending_lambda: 0.58,
+      upstreams: upstreams.map((u) => ({
+        id: u.id,
+        name: u.name,
+        url: u.url,
+        cores: u.cores,
+        weight: Number((u.assignedWeightPct / 100).toFixed(2)),
+      })),
+    },
+    null,
+    2
+  );
+
+  const dockerSnippet = `services:\n  fuzzload-gateway:\n    image: ghcr.io/tanisheesh/fuzzload:latest\n    ports:\n      - "8080:8080"\n      - "8000:8000"\n    environment:\n      - POLICY=fuzzload\n      - UPSTREAMS=${upstreams.map((u) => u.url).join(",")}`;
+
+  const pythonSnippet = `from app.cli import FuzzLoadRouter\n\nrouter = FuzzLoadRouter(\n    upstreams=[\n${upstreams
+    .map(
+      (u) =>
+        `        {"id": "${u.id}", "url": "${u.url}", "cores": ${u.cores}},`
+    )
+    .join("\n")}\n    ]\n)\n\ntarget_url = router.select_upstream()`;
+
+  const activeConfigText =
+    configTab === "cli"
+      ? cliCommand
+      : configTab === "json"
+      ? jsonConfig
+      : configTab === "docker"
+      ? dockerSnippet
+      : pythonSnippet;
+
   const handleCopyConfig = () => {
-    navigator.clipboard.writeText(cliCommand);
+    navigator.clipboard.writeText(activeConfigText);
     setCopiedConfig(true);
     setTimeout(() => setCopiedConfig(false), 1800);
   };
@@ -355,7 +391,7 @@ export default function ProxyPlaygroundPage() {
           <div className="lg:col-span-5 space-y-5 sm:space-y-6 min-w-0">
             <div className="panel-frame">
               <div className="panel-header">
-                <span>GENERATED GATEWAY CLI CONFIG</span>
+                <span>GENERATED GATEWAY CONFIG</span>
                 <button
                   onClick={handleCopyConfig}
                   className="text-[#ff5500] hover:underline font-bold cursor-pointer"
@@ -363,9 +399,31 @@ export default function ProxyPlaygroundPage() {
                   {copiedConfig ? "[COPIED]" : "[COPY]"}
                 </button>
               </div>
+              <div className="grid grid-cols-4 border-b border-[#222220] font-mono text-[10px]">
+                {(
+                  [
+                    ["cli", "CLI"],
+                    ["json", "JSON"],
+                    ["docker", "DOCKER"],
+                    ["python", "PYTHON"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setConfigTab(key)}
+                    className={`py-2 font-bold border-r border-[#222220] last:border-r-0 cursor-pointer ${
+                      configTab === key
+                        ? "bg-[#ff5500] text-[#080808]"
+                        : "bg-[#0b0b0b] text-[#88857e] hover:text-[#f2efe9]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="p-3.5 sm:p-4">
-                <pre className="p-3 bg-[#080808] border border-[#222220] font-mono text-[11px] sm:text-xs text-[#00e676] overflow-x-auto leading-relaxed">
-                  {cliCommand}
+                <pre className="p-3 bg-[#080808] border border-[#222220] font-mono text-[11px] sm:text-xs text-[#00e676] overflow-x-auto custom-scrollbar leading-relaxed max-h-64">
+                  {activeConfigText}
                 </pre>
               </div>
             </div>
@@ -375,7 +433,7 @@ export default function ProxyPlaygroundPage() {
                 <span>SERVER-SIDE HTTP PROBE TELEMETRY LOG</span>
                 <span>/api/probe</span>
               </div>
-              <div className="p-3.5 sm:p-4 font-mono text-[11px] text-[#88857e] space-y-2 max-h-72 overflow-y-auto break-words">
+              <div className="p-3.5 sm:p-4 font-mono text-[11px] text-[#88857e] space-y-2 max-h-72 overflow-y-auto custom-scrollbar break-words">
                 {probeLogs.map((log, index) => (
                   <div
                     key={index}

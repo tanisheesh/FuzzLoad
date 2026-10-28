@@ -104,7 +104,7 @@ export default function HowItWorksPage() {
                   </div>
                   <p className="text-xs sm:text-sm text-[#88857e] leading-relaxed">{item.desc}</p>
                 </div>
-                <div className="p-3 sm:p-3.5 bg-[#080808] border border-[#222220] font-mono text-[11px] sm:text-xs text-[#00e676] overflow-x-auto whitespace-nowrap">
+                <div className="p-3 sm:p-3.5 bg-[#080808] border border-[#222220] font-mono text-[11px] sm:text-xs text-[#00e676] overflow-x-auto custom-scrollbar whitespace-nowrap">
                   {item.formula}
                 </div>
               </div>
@@ -125,7 +125,7 @@ export default function HowItWorksPage() {
                 </h2>
                 <p className="text-xs sm:text-sm text-[#88857e] leading-relaxed">{sub.body}</p>
               </div>
-              <div className="p-3 bg-[#080808] border border-[#222220] font-mono text-[11px] text-[#00e676] overflow-x-auto whitespace-nowrap">
+              <div className="p-3 bg-[#080808] border border-[#222220] font-mono text-[11px] text-[#00e676] overflow-x-auto custom-scrollbar whitespace-nowrap">
                 {sub.eq}
               </div>
             </div>

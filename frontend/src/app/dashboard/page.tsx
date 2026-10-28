@@ -190,7 +190,46 @@ export default function LiveDemoDashboardPage() {
     a.href = url;
     a.download = `fuzzload-benchmark-gen${state.gp.generation}.csv`;
     a.click();
+    URL.revokeObjectURL(url);
     setExportBanner("EXPORTED CSV");
+    setTimeout(() => setExportBanner(null), 2500);
+  };
+
+  const handleExportJSON = () => {
+    const payload = {
+      exported_at: new Date().toISOString(),
+      algorithm: state.algorithm,
+      traffic_profile: state.traffic_profile,
+      current_rps: state.current_rps,
+      summary: state.summary,
+      nodes: state.nodes,
+      anfis: {
+        epoch: state.anfis.epoch,
+        current_loss: state.anfis.current_loss,
+        centroid_defuzz_score: state.anfis.centroid_defuzz_score,
+        active_rule_mask: state.anfis.active_rule_mask,
+        rules: state.anfis.rules,
+      },
+      gp: {
+        generation: state.gp.generation,
+        best_fitness: state.gp.best_fitness,
+        best_formula: state.gp.best_formula,
+        rule_mask_bitstring: state.gp.rule_mask_bitstring,
+        last_operator: state.gp.last_operator,
+      },
+      art_bam: state.art_bam,
+      benchmark: state.benchmark,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `fuzzload-telemetry-gen${state.gp.generation}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportBanner("EXPORTED JSON");
     setTimeout(() => setExportBanner(null), 2500);
   };
 
@@ -310,12 +349,15 @@ export default function LiveDemoDashboardPage() {
             <button onClick={handleExportCSV} className="brutal-btn !py-1.5 !px-3">
               CSV
             </button>
+            <button onClick={handleExportJSON} className="brutal-btn !py-1.5 !px-3">
+              JSON
+            </button>
             <button onClick={handleCopyLatex} className="brutal-btn !py-1.5 !px-3">
               LATEX
             </button>
             <button
               onClick={() => setIsPaused((p) => !p)}
-              className="col-span-2 sm:col-span-1 brutal-btn !py-1.5 !px-3"
+              className=" brutal-btn !py-1.5 !px-3"
             >
               {isPaused ? "▶ RESUME" : "❚❚ PAUSE"}
             </button>
@@ -491,7 +533,10 @@ export default function LiveDemoDashboardPage() {
                   <div className="mt-4 sm:mt-5 pt-3 border-t border-[#222220] font-mono">
                     <div className="flex items-center justify-between text-[10px] text-[#88857e] mb-2">
                       <span>INJECT FAULT:</span>
-                      {(node.chaos.cpu_spike || node.chaos.io_lag || node.chaos.offline) && (
+                      {(node.chaos.cpu_spike ||
+                        node.chaos.mem_leak ||
+                        node.chaos.io_lag ||
+                        node.chaos.offline) && (
                         <button
                           onClick={() => handleChaosToggle(node.node_id, "clear_all", true)}
                           className="text-[#ff5500] hover:underline cursor-pointer"
@@ -500,12 +545,12 @@ export default function LiveDemoDashboardPage() {
                         </button>
                       )}
                     </div>
-                    <div className="grid grid-cols-3 gap-1.5">
+                    <div className="grid grid-cols-2 gap-1.5">
                       <button
                         onClick={() =>
                           handleChaosToggle(node.node_id, "cpu_spike", !node.chaos.cpu_spike)
                         }
-                        className={`py-2 text-[10px] font-bold border cursor-pointer ${
+                        className={`py-1.5 text-[10px] font-bold border cursor-pointer ${
                           node.chaos.cpu_spike
                             ? "bg-[#ffb300] text-[#080808] border-[#ffb300]"
                             : "bg-[#151515] text-[#88857e] border-[#222220] hover:text-[#f2efe9]"
@@ -514,8 +559,20 @@ export default function LiveDemoDashboardPage() {
                         CPU SPIKE
                       </button>
                       <button
+                        onClick={() =>
+                          handleChaosToggle(node.node_id, "mem_leak", !node.chaos.mem_leak)
+                        }
+                        className={`py-1.5 text-[10px] font-bold border cursor-pointer ${
+                          node.chaos.mem_leak
+                            ? "bg-[#ffb300] text-[#080808] border-[#ffb300]"
+                            : "bg-[#151515] text-[#88857e] border-[#222220] hover:text-[#f2efe9]"
+                        }`}
+                      >
+                        MEM LEAK
+                      </button>
+                      <button
                         onClick={() => handleChaosToggle(node.node_id, "io_lag", !node.chaos.io_lag)}
-                        className={`py-2 text-[10px] font-bold border cursor-pointer ${
+                        className={`py-1.5 text-[10px] font-bold border cursor-pointer ${
                           node.chaos.io_lag
                             ? "bg-[#ffb300] text-[#080808] border-[#ffb300]"
                             : "bg-[#151515] text-[#88857e] border-[#222220] hover:text-[#f2efe9]"
@@ -527,7 +584,7 @@ export default function LiveDemoDashboardPage() {
                         onClick={() =>
                           handleChaosToggle(node.node_id, "offline", !node.chaos.offline)
                         }
-                        className={`py-2 text-[10px] font-bold border cursor-pointer ${
+                        className={`py-1.5 text-[10px] font-bold border cursor-pointer ${
                           node.chaos.offline
                             ? "bg-[#ff2a2a] text-[#f2efe9] border-[#ff2a2a]"
                             : "bg-[#151515] text-[#88857e] border-[#222220] hover:text-[#f2efe9]"
@@ -667,12 +724,12 @@ export default function LiveDemoDashboardPage() {
             </div>
 
             <div className="p-3.5 sm:p-5 space-y-4">
-              <div className="p-3 border border-[#222220] bg-[#080808] font-mono text-[11px] sm:text-xs text-[#00e676] overflow-x-auto whitespace-nowrap">
+              <div className="p-3 border border-[#222220] bg-[#080808] font-mono text-[11px] sm:text-xs text-[#00e676] overflow-x-auto custom-scrollbar whitespace-nowrap">
                 <span className="text-[#88857e]">Φ_GP(x) = </span>
                 {state.gp.best_formula}
               </div>
 
-              <div className="py-5 px-3 border border-[#222220] bg-[#0b0b0b] overflow-x-auto flex justify-start sm:justify-center">
+              <div className="py-5 px-3 border border-[#222220] bg-[#0b0b0b] overflow-x-auto custom-scrollbar flex justify-start sm:justify-center">
                 <ASTTreeVisualizer node={state.gp.ast_tree} />
               </div>
             </div>
@@ -715,7 +772,7 @@ export default function LiveDemoDashboardPage() {
               </ResponsiveContainer>
             </div>
 
-            <div className="p-3.5 sm:p-4 border-t border-[#222220] overflow-x-auto">
+            <div className="p-3.5 sm:p-4 border-t border-[#222220] overflow-x-auto custom-scrollbar">
               <table className="w-full min-w-[300px] text-left font-mono text-[11px] sm:text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-[#222220] text-[#88857e] text-[10px]">
