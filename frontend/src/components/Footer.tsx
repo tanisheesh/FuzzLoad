@@ -26,7 +26,7 @@ export default function Footer() {
               rel="noopener noreferrer"
               className="text-[#f2efe9] hover:text-[#ff5500] underline underline-offset-2"
             >
-              Krish (@krish-codess)
+              Krish Gohel (@krish-codess)
             </a>{" "}
             · Go Reverse Proxy + 5-Layer Takagi-Sugeno ANFIS + Symbolic GP
           </div>
