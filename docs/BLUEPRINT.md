@@ -5,15 +5,16 @@
 
 ---
 
-## 1. How All Three AI Paradigms Work Together (Fuzzy + Neural + Genetic Programming)
+## 1. How the Soft-Computing Subsystems Cooperate
 
-A common question in final-year capstone evaluations is: **"How do Fuzzy Logic, Neural Networks, and Genetic Programming each contribute, and why do we need all three?"**
-
-| Paradigm | Role in FuzzLoad | Timescale | What It Solves |
+| Subsystem | Role in FuzzLoad | Timescale | Engineering Purpose |
 |---|---|---|---|
-| **1. Fuzzy Logic (Takagi-Sugeno Inference)** | Converts noisy, multi-dimensional server telemetry (`CPU`, `RAM`, `Latency`, `Active Connections`) into smooth linguistic degrees (`Low`, `Medium`, `High`) and evaluates `IF-THEN` rules. | Per- cycle (`500ms`) | Eliminates brittle threshold oscillation (e.g., a hard rule at `CPU > 80%` causing rapid flapping between servers). |
-| **2. Neural Network (5-Layer Differentiable ANFIS)** | Wraps the Fuzzy Inference System into a 5-layer neural network trained online via **Backpropagation / Gradient Descent** + **Least Squares Estimation (LSE)**. | Fast Loop (`500ms`) | Automatically learns and tunes Gaussian membership centers ($c$), widths ($\sigma$), and rule weights ($p, q, r, s, b$) to minimize real-time P95 latency violations. |
-| **3. Genetic Programming (Tree-Based Symbolic Evolution)** | Evolves non-linear mathematical formulas (Syntax Trees) via **Crossover, Mutation, and Tournament Selection** on a 60-second Digital Twin traffic replay buffer. | Slow Loop (`5s–10s`) | Discovers completely new non-linear combinations of metrics when workload patterns shift (e.g., I/O bottlenecks where CPU is low but tail latency explodes). |
+| **1. McCulloch-Pitts Gate & BPN XOR Detector** | Hard binary threshold circuit breaker + 2-layer Backpropagation Network detecting non-linear `CPU XOR Latency` contention anomalies. | Per-request / `500ms` | Immediately trips when catastrophic inhibitory thresholds occur and flags hidden I/O stalls where CPU stays low while tail latency spikes. |
+| **2. Adaptive Resonance Theory (`ART1` & `ART2`)** | `ART1` classifies 4-bit binary fault signatures via bitwise intersection; `ART2` clusters 4D continuous telemetry into operational regimes using vigilance $\rho$ and **Delta Rule** prototype learning. | Fast Loop (`500ms`) | Solves the stability-plasticity dilemma by recognizing recurring workload regimes or dynamically allocating new resonance categories. |
+| **3. Exponential BAM (Autocorrelator & Heterocorrelator)** | Associates cluster stress patterns $\mathbf{X}$ with pre-converged routing weight priors $\mathbf{Y}$ using Wang et al. multiple-training encoding and exponential similarity kernels. | Fast Loop (`500ms`) | Recalls proven routing weight priors in a single pass whenever a previously encountered spike or fault regime recurs. |
+| **4. Fuzzy Logic (Gaussian + `LR-Type` Sets & Max-Min Relations)** | Maps crisp server metrics (`CPU`, `RAM`, `Latency`, `Connections`) into hybrid Gaussian and asymmetric **LR-Type Fuzzy Numbers**, evaluating a $3 \times 3$ **Max-Min Fuzzy Relation** matrix and 12 `IF-THEN` rules. | Fast Loop (`500ms`) | Models asymmetric tail-latency distributions and eliminates brittle threshold flapping. |
+| **5. 5-Layer Differentiable ANFIS (Momentum BPN + Dual Defuzzification)** | Wraps the fuzzy rule base into a 5-layer neural network trained online via **Momentum Backpropagation** and **Delta Rule** updates, computing both **Takagi-Sugeno** and **Mamdani Centroid** defuzzified scores. | Fast Loop (`500ms`) | Continuously adapts membership centers ($c$), spreads ($\sigma$), and linear consequent weights ($p, q, r, s, b$) to minimize SLA violations. |
+| **6. Symbolic GP + Bitwise `FLC-GA` Co-Optimizer** | Co-evolves mathematical syntax trees ($\Phi_{\text{GP}}$) alongside a **12-bit binary chromosome** using **Bitwise Crossover (`AND`/`OR`/`XOR`), Inversion, Deletion, and Point Mutation** on a 60s Digital Twin replay buffer. | Slow Loop (`6s`) | Discovers non-linear symbolic scoring formulas while structurally pruning redundant ANFIS rules (**FLC-GA structural optimization**) and tuning BPN premise offsets. |
 
 ---
 
