@@ -223,15 +223,24 @@ export default function LiveDemoDashboardPage() {
       100
   );
 
+  const offlineNodes = state.nodes.filter((n) => n.status === "offline");
   const degradedNodes = state.nodes.filter((n) => n.status !== "healthy");
-  const topNode = [...state.nodes].sort((a, b) => b.routing_weight - a.routing_weight)[0];
+  const onlineNodes = state.nodes.filter((n) => n.status !== "offline");
+  const topNode = [...onlineNodes].sort((a, b) => b.routing_weight - a.routing_weight)[0] ?? state.nodes[0];
+
   const sreNarrative =
-    degradedNodes.length > 0
+    onlineNodes.length === 0
+      ? `[CRITICAL CIRCUIT BREAKER TRIPPED] All 4 worker nodes are OFFLINE. McCulloch-Pitts safety gate inhibited all routing paths. Click [RESET] on at least one node to restore traffic.`
+      : degradedNodes.length > 0
       ? `[FAULT DETECTED] ${degradedNodes
-          .map((n) => `${n.name} P95=${n.p95_latency_ms.toFixed(0)}ms`)
-          .join(", ")}. ANFIS Rule #6 & #12 triggered online gradient step -> drained faulty node weight to ${(
-          degradedNodes[0].routing_weight * 100
-        ).toFixed(1)}% and routed ${Math.round(topNode.routing_weight * 100)}% load to ${topNode.name}.`
+          .map((n) =>
+            n.status === "offline"
+              ? `${n.name} OFFLINE (M-P Gate=0, Share=0%)`
+              : `${n.name} P95=${n.p95_latency_ms.toFixed(0)}ms (Share=${(n.routing_weight * 100).toFixed(0)}%)`
+          )
+          .join(", ")}. ANFIS Rule #6 & #12 + BAM recall shifted ${Math.round(
+          topNode.routing_weight * 100
+        )}% load to ${topNode.name}.`
       : `[NOMINAL] All 4 heterogeneous nodes within SLA at ${state.current_rps} RPS. ${
           topNode.name
         } carries ${Math.round(topNode.routing_weight * 100)}% share via ANFIS Epoch #${
@@ -239,6 +248,7 @@ export default function LiveDemoDashboardPage() {
         } + GP Gen #${state.gp.generation}. Cluster P95 = ${state.summary.active_p95_ms.toFixed(
           1
         )}ms (-${p95SavingPct}% vs Round Robin).`;
+  void offlineNodes;
 
   return (
     <div className="min-h-screen flex flex-col overflow-x-hidden">

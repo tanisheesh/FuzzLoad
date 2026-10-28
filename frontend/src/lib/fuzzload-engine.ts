@@ -769,15 +769,29 @@ export function evolveClientGP(prev: FuzzLoadClusterState, generations = 5): Fuz
   const nextGen = prev.gp.generation + generations;
   const pick = CANDIDATE_FORMULAS[(nextGen / 5) % CANDIDATE_FORMULAS.length | 0];
   const nextFit = Number(Math.min(0.988, prev.gp.best_fitness + 0.009 * Math.random() + 0.003).toFixed(4));
-  const avgFit = Number(Math.min(nextFit - 0.04, prev.gp.fitness_history.at(-1)?.avg_fitness ?? 0.75 + 0.006).toFixed(4));
+  const avgFit = Number(Math.min(nextFit - 0.04, (prev.gp.fitness_history.at(-1)?.avg_fitness ?? 0.75) + 0.006).toFixed(4));
+  const masks = ["111101111101", "110111101111", "111110110111", "101111011101"];
+  const ops = [
+    "SUBTREE_CROSSOVER + BITWISE_MASK_XOVER",
+    "POINT_MUTATION + CHROMOSOME_INVERSION",
+    "SUBTREE_MUTATION + LOCUS_DELETION_FLIP",
+  ];
+  const nextMask = masks[(nextGen / 5) % masks.length | 0];
+  const nextOp = ops[(nextGen / 5) % ops.length | 0];
 
   return {
     ...prev,
+    anfis: {
+      ...prev.anfis,
+      active_rule_mask: nextMask,
+    },
     gp: {
       ...prev.gp,
       generation: nextGen,
       best_fitness: nextFit,
       best_formula: pick.formula,
+      rule_mask_bitstring: nextMask,
+      last_operator: nextOp,
       ast_tree: pick.tree,
       fitness_history: [
         ...prev.gp.fitness_history.slice(-24),
