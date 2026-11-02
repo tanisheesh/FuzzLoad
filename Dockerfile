@@ -1,7 +1,7 @@
 # Multi-Stage Unified Dockerfile (Go Data Plane + Python AI Control Plane)
 # Ideal for Render Free Web Service or single-container AWS deployment.
 
-FROM golang:1.25-alpine AS go-builder
+FROM golang:1.27-alpine AS go-builder
 WORKDIR /go-src
 COPY proxy-go/go.mod ./
 COPY proxy-go/cmd/ ./cmd/
