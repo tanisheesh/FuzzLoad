@@ -7,7 +7,7 @@ COPY proxy-go/go.mod ./
 COPY proxy-go/cmd/ ./cmd/
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /fuzzload-proxy ./cmd/fuzzload-proxy
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 WORKDIR /app
 
 COPY --from=go-builder /fuzzload-proxy /usr/local/bin/fuzzload-proxy
