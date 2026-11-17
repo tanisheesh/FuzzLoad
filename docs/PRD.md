@@ -1,7 +1,7 @@
 # FuzzLoad — Product Requirements Document
 
 **Status:** Final  
-**Owners:** Tanish Poddar & Krish Gohel (`krish-codess`)  
+**Owner:** Tanish Poddar  
 **One-liner:** Adaptive Web Server Load Balancing Using Genetic Programming and Neuro-Fuzzy Control.
 
 ---
@@ -117,10 +117,5 @@ Static reverse-proxy load balancers (Nginx, HAProxy, AWS ALB) route traffic usin
 <a href="https://linkedin.com/in/tanisheesh"><img src="https://img.shields.io/badge/LinkedIn-tanisheesh-0A66C2?style=flat-square" alt="LinkedIn"></a>
 <a href="https://github.com/tanisheesh"><img src="https://img.shields.io/badge/GitHub-tanisheesh-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub"></a>
 <a href="mailto:hi@tanisheesh.in"><img src="https://img.shields.io/badge/Email-hi%40tanisheesh.in-EA4335?style=flat-square&logo=gmail&logoColor=white" alt="Email"></a>
-
-<h3>Krish Gohel</h3>
-
-<a href="https://github.com/krish-codess"><img src="https://img.shields.io/badge/GitHub-krish--codess-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub"></a>
-<a href="mailto:krishnakulgohel544@gmail.com"><img src="https://img.shields.io/badge/Email-krishnakulgohel544%40gmail.com-EA4335?style=flat-square&logo=gmail&logoColor=white" alt="Email"></a>
 
 </div>
