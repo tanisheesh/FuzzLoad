@@ -49,3 +49,6 @@ next-env.d.ts
 .idea/
 .DS_Store
 Thumbs.db
+brag-output/
+*.pem
+*.key

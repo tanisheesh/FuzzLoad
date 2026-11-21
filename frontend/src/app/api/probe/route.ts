@@ -17,13 +17,45 @@ function computePercentile(sorted: number[], p: number): number {
   return sorted[base] + rest * (next - sorted[base]);
 }
 
+function isPrivateOrLocalIPv4(ip: string): boolean {
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) {
+    return false;
+  }
+  const [a, b] = parts;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 100 && b >= 64 && b <= 127)
+  );
+}
+
 function isSafeHttpUrl(rawUrl: string): boolean {
   try {
     const parsed = new URL(rawUrl);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-    const host = parsed.hostname.toLowerCase();
-    // Block cloud metadata SSRF targets
-    if (host === "169.254.169.254" || host === "metadata.google.internal") return false;
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+    if (parsed.username || parsed.password) return false;
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (
+      host === "localhost" ||
+      host.endsWith(".localhost") ||
+      host.endsWith(".local") ||
+      host.endsWith(".internal") ||
+      host === "::1" ||
+      host === "::" ||
+      host.startsWith("fe80:") ||
+      host.startsWith("fc") ||
+      host.startsWith("fd") ||
+      host === "169.254.169.254" ||
+      host === "metadata.google.internal" ||
+      isPrivateOrLocalIPv4(host)
+    ) {
+      return false;
+    }
     return true;
   } catch {
     return false;
@@ -73,6 +105,7 @@ export async function POST(req: NextRequest) {
             const timer = setTimeout(() => ctrl.abort(), 6000);
             const resp = await fetch(target.url, {
               method: "GET",
+              redirect: "error",
               signal: ctrl.signal,
               headers: {
                 "User-Agent": "FuzzLoad-Adaptive-Load-Balancer/1.0 (+https://fuzzload.tanisheesh.in)",

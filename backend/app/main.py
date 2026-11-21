@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
+import os
+import urllib.parse
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -44,13 +47,38 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_cors_raw = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://fuzzload.tanisheesh.in")
+_allowed_origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+
+def _is_safe_probe_url(raw_url: str) -> bool:
+    """Validate probe URLs against SSRF (HTTP/HTTPS only, block loopback/private/link-local hosts)."""
+    try:
+        parsed = urllib.parse.urlparse(raw_url)
+    except ValueError:
+        return False
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    if parsed.username or parsed.password:
+        return False
+    host = parsed.hostname.lower().strip("[]")
+    if host in ("localhost", "metadata.google.internal") or host.endswith((".local", ".internal", ".localhost")):
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            return False
+    except ValueError:
+        pass
+    return True
 
 
 class AlgorithmUpdateRequest(BaseModel):
@@ -144,6 +172,8 @@ def probe_upstreams(req: ProxyProbeRequest) -> dict[str, Any]:
 
     probed = []
     for t in req.targets[:8]:
+        if not _is_safe_probe_url(t.url):
+            raise HTTPException(status_code=400, detail=f"Blocked unsafe or private probe URL: {t.url}")
         samples: list[float] = []
         status_code = 0
         errors = 0
