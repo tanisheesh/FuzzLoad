@@ -21,6 +21,7 @@ from app.ai_engine.gp_optimizer import (
 )
 from app.cli import FuzzLoadRouter
 from app.cluster.simulator import FuzzLoadClusterController
+from app.main import _is_safe_probe_url
 from fuzzload import FuzzLoadRouter as PublicFuzzLoadRouter
 
 
@@ -235,6 +236,19 @@ def test_bidirectional_go_proxy_sync_mock() -> None:
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_ssrf_probe_url_validation() -> None:
+    assert _is_safe_probe_url("https://example.com/health") is True
+    assert _is_safe_probe_url("http://api.example.org:8080/ping") is True
+    assert _is_safe_probe_url("http://127.0.0.1:8000/api/state") is False
+    assert _is_safe_probe_url("http://localhost:8080/api/weights") is False
+    assert _is_safe_probe_url("http://169.254.169.254/latest/meta-data/") is False
+    assert _is_safe_probe_url("http://10.0.0.5/internal") is False
+    assert _is_safe_probe_url("http://192.168.1.10/admin") is False
+    assert _is_safe_probe_url("http://[::1]:8080/") is False
+    assert _is_safe_probe_url("file:///etc/passwd") is False
+    assert _is_safe_probe_url("https://user:pass@example.com/") is False
 
 
 class FuzzLoadTestSuite(unittest.TestCase):
