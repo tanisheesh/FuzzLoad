@@ -31,7 +31,6 @@ env:
   NODE_DEFAULT_VERSION: "22"
   PYTHON_DEFAULT_VERSION: "3.12"
   RUN_E2E: "true"
-  NEXT_PUBLIC_API_URL: "http://localhost:8000"
 
 jobs:
   ci:

@@ -50,5 +50,9 @@ next-env.d.ts
 .DS_Store
 Thumbs.db
 brag-output/
+playwright-report/
+test-results/
+frontend/playwright-report/
+frontend/test-results/
 *.pem
 *.key
