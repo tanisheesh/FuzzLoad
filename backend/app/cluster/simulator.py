@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import random
@@ -18,6 +19,8 @@ from app.ai_engine.art_bam_memory import (
     ExponentialBAMAssociativeMemory,
 )
 from app.ai_engine.gp_optimizer import GeneticProgrammingOptimizer
+
+logger = logging.getLogger(__name__)
 
 VALID_ALGORITHMS = (
     "fuzzload",
@@ -167,7 +170,7 @@ class FuzzLoadClusterController:
             try:
                 parsed_w.append(max(0.01, float(w_str)))
             except ValueError:
-                pass
+                logger.warning("Ignoring invalid FUZZLOAD_WEIGHTS entry: %r", w_str)
 
         nodes: list[ServerNodeState] = []
         default_w = round(1.0 / max(1, len(urls)), 4)
@@ -277,8 +280,9 @@ class FuzzLoadClusterController:
             with urllib.request.urlopen(req, timeout=0.15) as resp:
                 if resp.status == 200:
                     self.go_proxy_connected = True
-        except Exception:
-            pass
+        except Exception as exc:
+            self.go_proxy_connected = False
+            logger.debug("Go proxy chaos sync skipped (offline): %s", exc)
 
     def _compute_incoming_rps(self) -> int:
         t = self.tick_count * 0.5

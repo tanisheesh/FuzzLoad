@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import http.client
 import ipaddress
+import logging
 import os
 import socket
 import ssl
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from app.cluster.simulator import FuzzLoadClusterController
 
+logger = logging.getLogger(__name__)
 controller = FuzzLoadClusterController()
 _bg_task: asyncio.Task[None] | None = None
 
@@ -27,8 +29,8 @@ async def _control_plane_loop() -> None:
     while True:
         try:
             controller.step_fast_loop(sync_go=True)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("control plane tick failed: %s", exc)
         await asyncio.sleep(0.5)
 
 
@@ -157,6 +159,7 @@ def _pinned_http_get_no_redirect(parsed: urllib.parse.ParseResult, pinned_ip: st
     conn: http.client.HTTPConnection
     if parsed.scheme == "https":
         ctx = ssl.create_default_context()
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         raw_sock = socket.create_connection((pinned_ip, port), timeout=timeout)
         tls_sock = ctx.wrap_socket(raw_sock, server_hostname=hostname)
         conn = http.client.HTTPSConnection(hostname, port=port, timeout=timeout, context=ctx)

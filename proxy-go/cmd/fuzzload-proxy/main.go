@@ -186,12 +186,8 @@ func main() {
 
 	var rpsAtomic atomic.Int64
 	rpsAtomic.Store(*loadgenRPS)
-	if *loadgenRPS > 0 {
-		startBackgroundLoadGen(ctx, fmt.Sprintf("http://127.0.0.1:%s", *portFlag), &rpsAtomic)
-	} else {
-		// Always start dormant loadgen goroutine so POST /api/loadgen can enable it at runtime.
-		startBackgroundLoadGen(ctx, fmt.Sprintf("http://127.0.0.1:%s", *portFlag), &rpsAtomic)
-	}
+	// Always start the loadgen goroutine (dormant when RPS == 0) so POST /api/loadgen can enable it at runtime.
+	startBackgroundLoadGen(ctx, fmt.Sprintf("http://127.0.0.1:%s", *portFlag), &rpsAtomic)
 
 	baseHandler := proxy.ControlMux()
 	rootHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

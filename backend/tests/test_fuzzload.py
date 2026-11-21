@@ -128,7 +128,7 @@ def test_cluster_controller_chaos_and_algorithms() -> None:
     assert len(state["nodes"]) == 4
     assert "art_bam" in state
 
-    updated = ctrl.inject_chaos("node-2", "cpu_spike", True)
+    ctrl.inject_chaos("node-2", "cpu_spike", True)
     updated = ctrl.inject_chaos("node-2", "io_lag", True)
     nodes_by_id = {n["node_id"]: n for n in updated["nodes"]}
     assert nodes_by_id["node-1"]["routing_weight"] > nodes_by_id["node-2"]["routing_weight"]
@@ -261,9 +261,9 @@ def test_non_four_node_cluster_weights_and_display_sanitization() -> None:
         os.environ["FUZZLOAD_WEIGHTS"] = "4,1"
         ctrl2 = FuzzLoadClusterController()
         assert len(ctrl2.nodes) == 2
+        assert ctrl2.nodes[0].name == "Node-1 (api1.example.com:8443)"
         assert "topsecret" not in ctrl2.nodes[0].name
         assert "svc" not in ctrl2.nodes[0].name
-        assert "api1.example.com:8443" in ctrl2.nodes[0].name
         assert ctrl2.nodes[0].static_weight == 4
         assert ctrl2.nodes[1].static_weight == 1
         ctrl2.set_algorithm("weighted_round_robin")

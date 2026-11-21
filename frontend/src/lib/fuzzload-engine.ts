@@ -596,7 +596,7 @@ export function stepClientSimulation(prev: FuzzLoadClusterState): FuzzLoadCluste
     const gpRaw = (1 - node.cpu_usage * node.cpu_usage) / (0.25 + normLat * (1 + normConn));
     const gpScore = Math.max(2, Math.min(99, (gpRaw / 4.0) * 100));
 
-    let w = 1.0;
+    let w: number;
     if (prev.algorithm === "round_robin") {
       w = 1.0;
     } else if (prev.algorithm === "weighted_round_robin") {
