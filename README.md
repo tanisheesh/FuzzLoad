@@ -1,5 +1,12 @@
 <p align="center">
-  <img src="docs/logo.svg" width="64" height="64" alt="FuzzLoad logo">
+  <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24"
+       fill="none" stroke="#FF5500" stroke-width="1.5"
+       stroke-linecap="round" stroke-linejoin="round">
+    <rect width="20" height="8" x="2" y="2" rx="2" ry="2"/>
+    <rect width="20" height="8" x="2" y="14" rx="2" ry="2"/>
+    <line x1="6" x2="6.01" y1="6" y2="6"/>
+    <line x1="6" x2="6.01" y1="18" y2="18"/>
+  </svg>
 </p>
 
 <h1 align="center">FuzzLoad</h1>
@@ -10,7 +17,7 @@
 
 <p align="center">
   <a href="https://fuzzload.tanisheesh.in">
-    <img src="https://img.shields.io/badge/live_demo-FF5500-FF5500?style=flat-square" alt="Live Demo">
+    <img src="https://img.shields.io/badge/live_demo-visit-FF5500?style=flat-square" alt="Live Demo">
   </a>
   <a href="https://github.com/tanisheesh/FuzzLoad/actions/workflows/ci.yml">
     <img src="https://github.com/tanisheesh/FuzzLoad/actions/workflows/ci.yml/badge.svg" alt="CI">
@@ -34,7 +41,7 @@
 
 ## What is FuzzLoad?
 
-Traditional reverse-proxy load balancers rely on static heuristics like Round Robin or Least Connections that fail when heterogeneous servers face bursty traffic, noisy-neighbor contention, or non-linear I/O bottlenecks. **FuzzLoad** decouples a high-throughput **Go (Golang) Reverse Proxy Data Plane** from a dual-loop **Python Soft-Computing Control Plane**: a **5-Layer Adaptive Neuro-Fuzzy Inference System (ANFIS)** adjusts server routing weights every 500ms using online backpropagation, while a **Genetic Programming (GP)** engine evolves symbolic scoring expressions in the background against a 60-second Digital Twin traffic replay buffer.
+Static reverse-proxy load balancers rely on fixed heuristics like Round Robin or Least Connections that keep routing traffic into CPU-spiked or I/O-stalled servers. **FuzzLoad** decouples a zero-allocation **Go Reverse Proxy & SDK** (`pkg/fuzzload`) from an out-of-band **Python Soft-Computing Control Plane**: a **5-Layer Adaptive Neuro-Fuzzy Inference System (ANFIS)** adapts routing weights every `500ms` via online momentum backpropagation, while **Genetic Programming (GP)** evolves symbolic scoring trees every `6s` over a 60-second Digital Twin replay buffer.
 
 > **Live demo →** [https://fuzzload.tanisheesh.in](https://fuzzload.tanisheesh.in)
 
@@ -42,10 +49,10 @@ Traditional reverse-proxy load balancers rely on static heuristics like Round Ro
 
 ## What you get
 
-- **5-Layer Neuro-Fuzzy (ANFIS) Controller** — Fuzzifies noisy server telemetry (`CPU`, `RAM`, `Latency`, `Connections`) into Gaussian membership curves and trains rule weights online via gradient descent every 500ms.
-- **Genetic Programming (GP) Symbolic Optimizer** — Evolves mathematical expression trees (`DEAP`) over a 60-second Digital Twin traffic replay buffer to discover optimal non-linear routing heuristics without risking live traffic.
-- **High-Throughput Go Reverse Proxy & SDK (`proxy-go/pkg/fuzzload`)** — Lock-free Copy-on-Write (`atomic.Pointer`) routing table and zero-allocation latency ring buffer (`7.49 ns/op`, `0 B/op`, `0 allocs/op` verified in CI) with passive circuit breaking, Prometheus `/metrics`, and hot-swappable algorithms (`Round Robin`, `Least Connections`, `Weighted RR`, `ANFIS-Only`, and `FuzzLoad GP+ANFIS`).
-- **Interactive Chaos & Topology Dashboard** — Visualize real-time packet routing, fuzzy membership shifts, GP syntax tree evolution, and P95/P99 tail-latency benchmarks while injecting synthetic CPU spikes or network lag.
+- **Lock-Free Go Reverse Proxy & Published SDK (`proxy-go/pkg/fuzzload@v1.0.1`)** — Copy-on-Write `atomic.Pointer` routing table (`4.8–7.5 ns/op`, `0 B/op`, `0 allocs/op`), lock-free latency ring buffer, passive circuit breaker, Prometheus `/metrics`, and standalone pure-Go adaptive mode.
+- **5-Layer Neuro-Fuzzy (ANFIS) Fast Control Loop** — Maps `CPU`, `RAM`, `Latency`, and `Connections` into Gaussian + LR-Type membership sets, updates premise/consequent weights online every `500ms`, and cooperates with `ART1`/`ART2` clustering and `Exponential BAM` recall.
+- **Symbolic Genetic Programming + Bitwise FLC-GA Slow Loop** — Evolves human-readable mathematical expression trees and a 12-bit structural rule mask offline against a rolling 60-second telemetry replay buffer before promoting elite weights.
+- **Python SDK, CLI & Interactive Chaos Console** — Embed `from fuzzload import FuzzLoadRouter`, run `fuzzload start | probe | bench`, or test faults and real public HTTP endpoints live across `/dashboard` and `/playground`.
 
 ---
 
@@ -57,7 +64,7 @@ Traditional reverse-proxy load balancers rely on static heuristics like Round Ro
 | Go Latency Ring Write (`LatencyRing.Record`) | `14.9–45.1 ns/op` · `0 B/op` · `0 allocs/op` | `proxy-go/pkg/fuzzload/telemetry.go` (GitHub Actions CI) |
 | P95 Tail-Latency Reduction (480 RPS + Chaos) | `-69.5%` (`34.2 ms` vs `112.4 ms` Round Robin) | `bench/run_benchmark.py` · `bench/README.md` |
 | Capacity-Normalized Jain's Fairness | `0.974` (`0.04%` error rate) | `bench/run_benchmark.py` |
-| Automated Verification Suite | `5` Go race tests + `1` GoDoc example + `9` Python tests + CodeQL + Gitleaks | `.github/workflows/` |
+| Automated Verification Suite | `7` Go race tests + `1` GoDoc example + `10` Python tests + Playwright E2E/a11y + CodeQL + Gitleaks | `.github/workflows/` |
 
 ---
 
@@ -66,8 +73,8 @@ Traditional reverse-proxy load balancers rely on static heuristics like Round Ro
 | Layer | Tech |
 |---|---|
 | Frontend | Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 3 · Recharts 3 |
-| Data Plane & Go SDK | Go 1.23 (`net/http/httputil` · `atomic.Pointer` · `LatencyRing` · `pkg/fuzzload@v1.0.0`) |
-| AI Control Plane & Python SDK | Python 3.12 · FastAPI · Pydantic v2 · 5-Layer ANFIS · Symbolic GP · ART1/ART2/BAM · `fuzzload` CLI |
+| Data Plane & Go SDK | Go 1.23 (`net/http/httputil` · `atomic.Pointer` · `LatencyRing` · `pkg/fuzzload@v1.0.1`) |
+| AI Control Plane & Python SDK | Python 3.12 · FastAPI · Pydantic · Pure-Python 5-Layer ANFIS, Symbolic GP & ART/BAM · `fuzzload` CLI |
 | Cluster & Telemetry | Heterogeneous Go Workers · Sliding-Window P50/P95/P99 · Prometheus `/metrics` · Chaos Injector |
 | Infra & Security | Vercel (`bom1`, security headers) · Multi-Stage Docker / Render · CodeQL · Gitleaks · Renovate (`Yantra [bot]`) |
 
@@ -75,17 +82,17 @@ Traditional reverse-proxy load balancers rely on static heuristics like Round Ro
 
 ## Engineering Decisions
 
-**Why write the Data Plane in Go and the AI Control Plane in Python?**
-Python's Global Interpreter Lock (GIL) and garbage collection pauses introduce tail-latency jitter in high-concurrency HTTP reverse proxies. Writing the reverse proxy and worker nodes in Go provides `<0.2ms` lock-free request forwarding and a `~15MB` memory footprint, while Python handles vectorized 5-layer ANFIS backpropagation and DEAP symbolic tree evolution asynchronously out-of-band.
+**Why decouple the Go Data Plane from the Python AI Control Plane?**
+Running neural backpropagation or symbolic tree evaluation synchronously inside an HTTP handler adds milliseconds of jitter per request. Keeping request forwarding on a lock-free Go `atomic.Pointer` table achieves `4.8–7.5 ns/op` (`0 allocs/op`), while Python updates weights asynchronously every `500ms` (or pure Go adapts standalone via `StartAutoControlLoop`).
 
-**Why combine Fuzzy Logic, Neural Networks, and Genetic Programming instead of Deep RL?**
-Deep Reinforcement Learning (PPO/DQN) behaves as an uninterpretable black box and can make catastrophic routing decisions during unseen traffic spikes. Fuzzy Logic bounds uncertainty in raw telemetry, the 5-layer ANFIS neural network adapts membership parameters smoothly via gradient descent, and Genetic Programming evolves human-readable mathematical expressions that can be audited in real time.
+**Why combine Neuro-Fuzzy (ANFIS) and Genetic Programming instead of Deep RL?**
+Deep Reinforcement Learning (PPO/DQN) behaves as an opaque black box and can explore catastrophically during unseen traffic spikes. Gaussian fuzzy rules provide zero-epoch cold-start safety, 5-layer ANFIS adapts smoothly via gradient descent, and Genetic Programming evolves explicit mathematical formulas engineers can audit directly.
 
-**Why evaluate Genetic Programming trees on a Digital Twin Replay Buffer instead of live servers?**
-Testing randomly mutated GP formulas directly on production traffic would route requests to overloaded nodes when low-fitness individuals are evaluated. Simulating each generation against the last 60 seconds of recorded telemetry allows 50+ generations to evolve in milliseconds with zero impact on live traffic.
+**Why evaluate Genetic Programming trees on a 60s Digital Twin Replay Buffer instead of live traffic?**
+Mutated candidate trees can produce unstable scores before selection. Evaluating 36 candidate trees offline against the rolling 60-second replay buffer takes under `40ms` and ensures only verified high-fitness formulas are promoted into live routing.
 
-**What would you do differently in v2?**
-Move the data-plane packet forwarding into an eBPF/XDP kernel-bypass layer reading routing weights directly from pinned BPF maps updated by the Python AI control plane.
+**What would you improve next?**
+Move L4 packet forwarding into a Linux eBPF/XDP kernel-bypass program reading weights from pinned BPF maps once single-host traffic exceeds `100K RPS`, upgrade Type-1 Gaussian sets to Interval Type-2 Fuzzy Logic for high-variance multi-AZ jitter, and switch the 500ms HTTP control sync to streaming gRPC protobufs.
 
 ---
 
@@ -93,18 +100,16 @@ Move the data-plane packet forwarding into an eBPF/XDP kernel-bypass layer readi
 
 | Document | Description |
 |---|---|
-| [Research & System Blueprint](docs/BLUEPRINT.md) | Complete B.Tech capstone research guide, mathematical formulation, and AWS/Render deployment plan |
-| [PRD](docs/PRD.md) | Product requirements — problem statement, goals, user stories, non-goals |
-| [Architecture](docs/ARCHITECTURE.md) | System design, Go Data Plane + Python Control Plane data flow, ANFIS & GP pipeline |
-| [Decisions](docs/DECISIONS.md) | Every major architectural and algorithmic decision and why |
-| [Usage & SDK Reference](docs/USAGE.md) | Go SDK (`pkg/fuzzload`), Python SDK (`fuzzload`), CLI commands, and HTTP/WS API reference |
-| [Setup](docs/SETUP.md) | Local development setup and cluster execution |
-| [Deploy](docs/DEPLOY.md) | Production deployment on Vercel, AWS EC2, and Render |
-| [Benchmarks](bench/README.md) | Verified Go hot-path microbenchmarks and 5-policy comparative latency results |
-| [Agent Guidelines](AGENTS.md) | Runtime coding, security, UI craft, and verification contract |
-| [Contributing](CONTRIBUTING.md) | How to propose changes |
-| [Changelog](CHANGELOG.md) | What changed in each release |
-| [Security](SECURITY.md) | How to report a vulnerability |
+| [PRD](docs/PRD.md) | Product requirements — quantified impact, acceptance criteria, edge cases, unit economics |
+| [Architecture](docs/ARCHITECTURE.md) | System topology (Mermaid), API contracts, ring-buffer schema, soft-computing pipeline, scale ceilings |
+| [Decisions](docs/DECISIONS.md) | Technical ADRs — comparison matrices, tradeoffs, and reversal triggers |
+| [Usage](docs/USAGE.md) | Go SDK (`pkg/fuzzload`), Python SDK (`fuzzload`), CLI commands, and HTTP/WS API reference |
+| [Setup](docs/SETUP.md) | Local dev onboarding, env var matrix, verification suite, and troubleshooting |
+| [Deploy](docs/DEPLOY.md) | Production topology, security headers, smoke checks, rollback, and incident runbooks |
+| [Benchmarks](bench/README.md) | Verified Go hot-path microbenchmarks and 5-policy comparative latency tables |
+| [Contributing](CONTRIBUTING.md) | Branching, emoji commit style, and PR checklist |
+| [Changelog](CHANGELOG.md) | Release history mapped to commit history |
+| [Security](SECURITY.md) | Vulnerability reporting policy and security scope |
 
 ---
 
@@ -113,7 +118,7 @@ Move the data-plane packet forwarding into an eBPF/XDP kernel-bypass layer readi
 <h3>Tanish Poddar</h3>
 
 <a href="https://tanisheesh.in"><img src="https://img.shields.io/badge/Website-tanisheesh.in-111111?style=flat-square&logo=googlechrome&logoColor=white" alt="Website"></a>
-<a href="https://linkedin.com/in/tanisheesh"><img src="https://img.shields.io/badge/LinkedIn-tanisheesh-0A66C2?style=flat-square" alt="LinkedIn"></a>
+<a href="https://linkedin.com/in/tanisheesh"><img src="https://img.shields.io/badge/LinkedIn-tanisheesh-0A66C2?style=flat-square&logo=linkedin&logoColor=white" alt="LinkedIn"></a>
 <a href="https://github.com/tanisheesh"><img src="https://img.shields.io/badge/GitHub-tanisheesh-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub"></a>
 <a href="mailto:hi@tanisheesh.in"><img src="https://img.shields.io/badge/Email-hi%40tanisheesh.in-EA4335?style=flat-square&logo=gmail&logoColor=white" alt="Email"></a>
 

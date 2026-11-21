@@ -12,7 +12,7 @@ For local development, see [SETUP.md](SETUP.md).
 |---|---|---|---|
 | **Frontend Dashboard (`frontend/`)** | Vercel (Free) | `bom1` (India) · Node `22.x` · Fluid Compute | `30s` timeout · sourcemaps protected · docs-only builds ignored |
 | **Go Proxy + Python Control Plane** | Render (Free Docker) *or* AWS EC2 (`t3.micro`) | Multi-stage `golang:1.23-alpine` + `python:3.12-slim` | `512 MB` RAM on Render (sleeps after 15m idle; UI Digital Twin hides cold start) |
-| **Go SDK Package** | Go Module Proxy (`pkg.go.dev`) | Public tag `proxy-go/v1.0.0` | Immutable Go checksum DB (`sum.golang.org`) |
+| **Go SDK Package** | Go Module Proxy (`pkg.go.dev`) | Public tag `proxy-go/v1.0.1` | Immutable Go checksum DB (`sum.golang.org`) |
 | **DNS & TLS** | GoDaddy → Vercel | `fuzzload.tanisheesh.in` | CNAME + automatic Vercel TLS certificate |
 
 ---
@@ -56,8 +56,8 @@ Configure variables in the host dashboard (encrypted at rest; never commit). Ful
 ### Go SDK Release (`pkg.go.dev`)
 
 ```bash
-git tag -a proxy-go/v1.0.0 -m "FuzzLoad Go SDK v1.0.0"
-git push origin proxy-go/v1.0.0
+git tag -a proxy-go/v1.0.1 -m "FuzzLoad Go SDK v1.0.1"
+git push origin proxy-go/v1.0.1
 ```
 
 ---
@@ -86,7 +86,7 @@ curl -s -X POST https://fuzzload.tanisheesh.in/api/probe \
   -d '{"requestsPerTarget":1,"targets":[{"id":"t1","name":"local","url":"http://127.0.0.1:8000","cores":2}]}'
 
 # 3. Verify Go SDK package is indexed on pkg.go.dev
-curl -fsSI https://pkg.go.dev/github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload@v1.0.0
+curl -fsSI https://pkg.go.dev/github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload@v1.0.1
 ```
 
 - [ ] `https://fuzzload.tanisheesh.in`, `/dashboard`, `/playground`, and `/how-it-works` load cleanly on mobile (`375px`) and desktop (`1280px`) with zero console errors.

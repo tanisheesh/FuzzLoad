@@ -83,9 +83,9 @@
 
 ## What I'd improve next
 
-- **eBPF/XDP Kernel Bypass** — Eliminate userspace socket copies by pushing ANFIS+GP weights into pinned BPF maps.
+- **eBPF/XDP Kernel Bypass** — Eliminate userspace socket copies by pushing ANFIS+GP weights into pinned BPF maps once single-host throughput exceeds `100K RPS`.
 - **Interval Type-2 Fuzzy Sets** — Add Footprint of Uncertainty (FOU) bounds to absorb high-variance multi-AZ cloud network jitter.
-- **Playwright E2E + Axe Accessibility Suite** — Add automated browser smoke tests across all 4 dashboard routes at `375px` and `1280px`.
+- **Streaming gRPC Control Plane** — Replace `500ms` HTTP JSON sync between Go and Python with bidirectional gRPC protobuf streams for clusters larger than `200` nodes.
 
 ---
 

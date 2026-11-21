@@ -8,17 +8,17 @@ Complete reference for installing, embedding, and operating **FuzzLoad** across 
 
 ```bash
 # Go SDK (lock-free atomic router + standalone Neuro-Fuzzy/GP loop)
-go get github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload@v1.0.0
+go get github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload@v1.0.1
 
 # Go Reverse Proxy CLI binary
-go install github.com/tanisheesh/FuzzLoad/proxy-go/cmd/fuzzload-proxy@v1.0.0
+go install github.com/tanisheesh/FuzzLoad/proxy-go/cmd/fuzzload-proxy@v1.0.1
 
 # Python SDK & CLI (from repo)
 pip install -e ./backend
 ```
 
 - **Live Web Console:** `https://fuzzload.tanisheesh.in`
-- **Go Package Docs:** `https://pkg.go.dev/github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload@v1.0.0`
+- **Go Package Docs:** `https://pkg.go.dev/github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload@v1.0.1`
 - **Default Control Plane URL:** `http://127.0.0.1:8000`
 - **Default Go Data Plane URL:** `http://127.0.0.1:8080`
 

@@ -7,20 +7,33 @@ All notable changes to **FuzzLoad** are documented here.
 ## [Unreleased]
 
 ### 🔒 Security
-- Hardened SSRF protections on `/api/probe` (Next.js) and `/api/proxy/probe` (FastAPI) to block loopback, private IPv4/IPv6 ranges, `.local`/`.internal` hosts, embedded credentials, and unsafe redirects
+- Hardened SSRF protections on `/api/probe` (Next.js) and `/api/proxy/probe` (FastAPI) with DNS resolution, pinned outbound IP sockets, IPv4-mapped IPv6 (`::ffff:7f00:1`) filtering, TLS 1.2+ enforcement, and HTTP 3xx redirect blocking
+- Protected mutating Go proxy admin endpoints (`POST /api/weights`, `POST /api/chaos`) with constant-time `Bearer FUZZLOAD_ADMIN_TOKEN` / loopback authorization and added `Proxy.AdminHandler()`
 - Added `frontend/vercel.json` production security headers (`HSTS`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`)
 - Restricted FastAPI CORS origins via `CORS_ORIGINS` environment variable
 
-### 📚 Docs & Automation
-- Added runtime `AGENTS.md`, `docs/USAGE.md` (Go SDK, Python SDK, CLI & API reference), `.coderabbit.yaml`, `.github/CODEOWNERS`, and `.github/labeler.yml`
-- Upgraded CI/security automation with CodeQL (Go, Python, JS/TS), Gitleaks secret scanning, Dependency Review, PR Labeler, tag-based Releases, and Renovate (`Yantra [bot]`)
+### 🐛 Fixed
+- Fixed Go proxy transport-error double counting, added `statusCaptureWriter.Unwrap()` for WebSocket/SSE upgrades, returned `503 Service Unavailable` when all nodes are unavailable, added passive circuit-breaker cooldown recovery + half-open failure re-tripping, worker `ReadHeaderTimeout`, and graceful `Shutdown` waiting
+- Fixed non-4-node custom cluster BAM sizing, configured `FUZZLOAD_WEIGHTS` mapping to `static_weight`, and credential stripping in node display labels
+- Resolved all CodeQL static-analysis findings across Go, Python, and TypeScript
+
+### 🧪 Tests & Automation
+- Added Playwright E2E + `@axe-core/playwright` WCAG AA accessibility + mobile/desktop overflow smoke suite across `/`, `/dashboard`, `/playground`, and `/how-it-works`
+- Added runtime `AGENTS.md`, `docs/USAGE.md`, `.coderabbit.yaml`, `.github/CODEOWNERS`, `.github/labeler.yml`, CodeQL, Gitleaks CLI full-range secret scanning, Dependency Review, tag Releases, and Renovate (`Yantra [bot]`)
+
+---
+
+## [1.0.1] — 2026-11-21
+
+### ✨ Added
+- Published `proxy-go/v1.0.1` on `pkg.go.dev` with circuit-breaker recovery, admin route auth, `ResponseController` `Unwrap()`, empty-pool `503`, and graceful shutdown
 
 ---
 
 ## [1.0.0] — 2026-11-21
 
 ### ✨ Added
-- Published zero-allocation lock-free Go SDK (`github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload@v1.0.0`) with Copy-on-Write (`atomic.Pointer`) routing table (`4.8–7.5 ns/op`, `0 B/op`, `0 allocs/op`), atomic latency ring buffer, passive circuit breaker, active `/healthz` prober, Prometheus `/metrics`, and standalone pure-Go Neuro-Fuzzy + GP auto-adaptation loop
+- Published zero-allocation lock-free Go SDK (`github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload`) with Copy-on-Write (`atomic.Pointer`) routing table (`4.8–7.5 ns/op`, `0 B/op`, `0 allocs/op`), atomic latency ring buffer, passive circuit breaker, active `/healthz` prober, Prometheus `/metrics`, and standalone pure-Go Neuro-Fuzzy + GP auto-adaptation loop
 - Configurable Go reverse proxy CLI (`fuzzload-proxy`) supporting `--port`, `--upstreams`, `--weights`, `--policy`, `--config`, `--spawn-workers`, `--standalone-auto`, and `--loadgen-rps`
 - Bidirectional Go Data Plane <-> Python AI Control Plane telemetry, weight, and chaos synchronization
 - Public Python SDK (`from fuzzload import FuzzLoadRouter`) and multi-command CLI (`fuzzload start`, `fuzzload probe`, `fuzzload bench`)
@@ -29,7 +42,8 @@ All notable changes to **FuzzLoad** are documented here.
 
 ---
 
-[Unreleased]: https://github.com/tanisheesh/FuzzLoad/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/tanisheesh/FuzzLoad/compare/proxy-go/v1.0.1...HEAD
+[1.0.1]: https://github.com/tanisheesh/FuzzLoad/releases/tag/proxy-go/v1.0.1
 [1.0.0]: https://github.com/tanisheesh/FuzzLoad/releases/tag/v1.0.0
 
 ---
