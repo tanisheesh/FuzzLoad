@@ -4,6 +4,22 @@ import React, { useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
+interface ProbedTargetResponse {
+  id: string;
+  name: string;
+  url: string;
+  cores: number;
+  statusCode?: number;
+  bytesReceived?: number;
+  p50LatencyMs?: number;
+  p95LatencyMs: number;
+  estimatedCpu: number;
+  anfisScore: number;
+  gpScore: number;
+  assignedWeightPct: number;
+  status: "ready" | "probed" | "slow" | "offline";
+}
+
 interface CustomUpstream {
   id: string;
   name: string;
@@ -136,8 +152,8 @@ export default function ProxyPlaygroundPage() {
       });
 
       if (res.ok) {
-        const data = await res.json();
-        const updated: CustomUpstream[] = data.targets.map((t: any) => ({
+        const data: { targets: ProbedTargetResponse[] } = await res.json();
+        const updated: CustomUpstream[] = data.targets.map((t) => ({
           id: t.id,
           name: t.name,
           url: t.url,

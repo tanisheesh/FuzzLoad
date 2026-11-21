@@ -107,7 +107,9 @@ export default function LiveDemoDashboardPage() {
           body: JSON.stringify({ algorithm }),
         });
         if (res.ok) setState(await res.json());
-      } catch {}
+      } catch {
+        setBackendLive(false);
+      }
     }
   };
 
@@ -124,7 +126,9 @@ export default function LiveDemoDashboardPage() {
           body: JSON.stringify({ profile, base_rps: newRps }),
         });
         if (res.ok) setState(await res.json());
-      } catch {}
+      } catch {
+        setBackendLive(false);
+      }
     }
   };
 
@@ -158,7 +162,9 @@ export default function LiveDemoDashboardPage() {
           body: JSON.stringify({ node_id: nodeId, fault_type: faultType, enabled }),
         });
         if (res.ok) setState(await res.json());
-      } catch {}
+      } catch {
+        setBackendLive(false);
+      }
     }
   };
 
@@ -172,7 +178,9 @@ export default function LiveDemoDashboardPage() {
           body: JSON.stringify({ generations: 5 }),
         });
         if (res.ok) setState(await res.json());
-      } catch {}
+      } catch {
+        setBackendLive(false);
+      }
     }
   };
 
@@ -262,7 +270,6 @@ export default function LiveDemoDashboardPage() {
       100
   );
 
-  const offlineNodes = state.nodes.filter((n) => n.status === "offline");
   const degradedNodes = state.nodes.filter((n) => n.status !== "healthy");
   const onlineNodes = state.nodes.filter((n) => n.status !== "offline");
   const topNode = [...onlineNodes].sort((a, b) => b.routing_weight - a.routing_weight)[0] ?? state.nodes[0];
@@ -287,7 +294,6 @@ export default function LiveDemoDashboardPage() {
         } + GP Gen #${state.gp.generation}. Cluster P95 = ${state.summary.active_p95_ms.toFixed(
           1
         )}ms (-${p95SavingPct}% vs Round Robin).`;
-  void offlineNodes;
 
   return (
     <div className="min-h-screen flex flex-col overflow-x-hidden">
