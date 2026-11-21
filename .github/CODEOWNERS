@@ -1,0 +1,23 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  TANISH'S SETUP TOOLKIT · tanisheesh.in                              ║
+# ║  Code owners. Goes to: <repo>/.github/CODEOWNERS                     ║
+# ║  Works as-is in any repo.                                            ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
+# Default owner for all files
+* @tanisheesh
+
+# Sensitive paths (automation, agent rules, security, schema/migrations)
+/.github/       @tanisheesh
+/AGENTS.md      @tanisheesh
+/SECURITY.md    @tanisheesh
+/prisma/        @tanisheesh
+/migrations/    @tanisheesh
+
+# ──────────────────────────────────────────────────────────────────────────
+#  Tanish Poddar
+#  Website   https://tanisheesh.in
+#  LinkedIn  https://linkedin.com/in/tanisheesh
+#  GitHub    https://github.com/tanisheesh
+#  Email     hi@tanisheesh.in
+# ──────────────────────────────────────────────────────────────────────────

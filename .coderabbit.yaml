@@ -1,0 +1,111 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  TANISH'S SETUP TOOLKIT · tanisheesh.in                              ║
+# ║  CodeRabbit AI PR review config. Goes to: <repo>/.coderabbit.yaml    ║
+# ║  Works as-is on public repos (free tier) and reads AGENTS.md.        ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
+language: "en-US"
+early_access: false
+enable_free_tier: true
+
+reviews:
+  profile: "chill"
+  high_level_summary: true
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  poem: false
+  review_status: true
+  commit_status: true
+  enable_prompt_for_ai_agents: true
+
+  slop_detection:
+    enabled: true
+
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+
+  path_filters:
+    - "!**/*.lock"
+    - "!**/package-lock.json"
+    - "!**/pnpm-lock.yaml"
+    - "!**/uv.lock"
+    - "!**/dist/**"
+    - "!**/.next/**"
+    - "!**/coverage/**"
+    - "!**/playwright-report/**"
+
+  path_instructions:
+    - path: "**/{app/api,api,server,routes,webhooks}/**"
+      instructions: |
+        - Verify strict Zod/Pydantic input validation before DB writes (no mass assignment).
+        - Verify both authentication AND resource ownership/authorization checks (prevent IDOR).
+        - Check webhook signature verification uses HMAC-SHA256 + timingSafeEqual on raw body.
+        - Flag any hardcoded secrets, SSRF risks, or unvalidated LLM JSON outputs.
+        - Ensure non-empty error handling with clean HTTP status codes.
+    - path: "**/components/**"
+      instructions: |
+        - Enforce reusable primitives (`components/ui/`) vs feature components (`components/features/`).
+        - Flag AI-slop UI clichés (purple/pink gradients, neon glows, fake hardcoded metrics, emoji UI headings, dead buttons).
+        - Ensure Loading, Empty, Error, and Populated states are all handled.
+        - Check semantic HTML, keyboard focusability, accessibility labels, and responsive overflow safety.
+    - path: "**/{tests,test,e2e,__tests__}/**"
+      instructions: |
+        - Verify real assertions on behavior, edge cases, and failure status codes (400/401/403/404).
+        - Flag skipped tests (`test.skip`), brittle selectors, or tests that mock away the logic being tested.
+    - path: ".github/workflows/**"
+      instructions: |
+        - Check least-privilege permissions, pin/use Node 24 compatible action majors, and flag pull_request_target misuse or script injection from PR metadata.
+
+  tools:
+    actionlint:
+      enabled: true
+    zizmor:
+      enabled: true
+    gitleaks:
+      enabled: true
+    opengrep:
+      enabled: true
+    trivy:
+      enabled: true
+    osvScanner:
+      enabled: true
+    eslint:
+      enabled: true
+    biome:
+      enabled: true
+    oxc:
+      enabled: true
+    reactDoctor:
+      enabled: true
+    ruff:
+      enabled: true
+    markdownlint:
+      enabled: true
+    hadolint:
+      enabled: true
+    psscriptanalyzer:
+      enabled: true
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "AGENTS.md"
+  learnings:
+    scope: "auto"
+
+# ──────────────────────────────────────────────────────────────────────────
+#  Tanish Poddar
+#  Website   https://tanisheesh.in
+#  LinkedIn  https://linkedin.com/in/tanisheesh
+#  GitHub    https://github.com/tanisheesh
+#  Email     hi@tanisheesh.in
+# ──────────────────────────────────────────────────────────────────────────

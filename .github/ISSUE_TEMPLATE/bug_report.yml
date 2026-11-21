@@ -61,7 +61,7 @@ body:
       label: Environment
       description: Browser / OS / runtime version, whatever is relevant.
       placeholder: Chrome 129 on Windows 11 · Node 22
-    
+
   - type: textarea
     id: logs
     attributes:

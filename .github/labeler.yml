@@ -1,0 +1,67 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  TANISH'S SETUP TOOLKIT · tanisheesh.in                              ║
+# ║  PR auto-labeler config. Goes to: <repo>/.github/labeler.yml         ║
+# ║  Works with actions/labeler@v7.                                      ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
+changed-files-labels-limit: 6
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "frontend/src/**"
+          - "**/components/**"
+          - "**/app/**/*.tsx"
+          - "**/*.css"
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "backend/**"
+          - "proxy-go/**"
+          - "frontend/src/app/api/**"
+          - "**/*.py"
+          - "**/*.go"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/tests/**"
+          - "**/test/**"
+          - "**/e2e/**"
+          - "**/*_test.go"
+          - "**/*.spec.*"
+          - "**/*.test.*"
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "bench/README.md"
+          - "*.md"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "Dockerfile"
+          - "**/Dockerfile"
+          - "docker-compose.yml"
+
+security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "SECURITY.md"
+          - "frontend/vercel.json"
+          - "frontend/src/app/api/probe/**"
+          - ".github/workflows/codeql.yml"
+          - ".github/workflows/secret-scan.yml"
+          - ".github/workflows/dependency-review.yml"
+
+# ──────────────────────────────────────────────────────────────────────────
+#  Tanish Poddar
+#  Website   https://tanisheesh.in
+#  LinkedIn  https://linkedin.com/in/tanisheesh
+#  GitHub    https://github.com/tanisheesh
+#  Email     hi@tanisheesh.in
+# ──────────────────────────────────────────────────────────────────────────
