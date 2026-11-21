@@ -57,6 +57,14 @@ export default function Footer() {
             [04] Math
           </Link>
           <a
+            href="https://pkg.go.dev/github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#00e676] hover:text-[#ff5500] transition"
+          >
+            Go SDK ↗
+          </a>
+          <a
             href="https://github.com/tanisheesh/FuzzLoad"
             target="_blank"
             rel="noopener noreferrer"

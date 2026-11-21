@@ -187,7 +187,7 @@ export default function ProxyPlaygroundPage() {
     }
   };
 
-  const cliCommand = `fuzzload start \\\n  --upstreams "${upstreams.map((u) => u.url).join(",")}" \\\n  --weights "${upstreams.map((u) => (u.assignedWeightPct / 100).toFixed(2)).join(",")}" \\\n  --policy fuzzload \\\n  --port 8080`;
+  const cliCommand = `# Go Data Plane Proxy (standalone pure-Go Neuro-Fuzzy+GP auto-tuner)\nfuzzload-proxy \\\n  --upstreams "${upstreams.map((u) => u.url).join(",")}" \\\n  --weights "${upstreams.map((u) => (u.assignedWeightPct / 100).toFixed(2)).join(",")}" \\\n  --policy fuzzload --port 8080 --standalone-auto\n\n# Python Control Plane (5-Layer ANFIS + Symbolic GP)\nfuzzload start --policy fuzzload --port 8000`;
 
   const jsonConfig = JSON.stringify(
     {

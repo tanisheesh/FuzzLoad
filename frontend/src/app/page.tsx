@@ -16,24 +16,27 @@ import (
 )
 
 proxy, _ := fuzzload.NewProxy(fuzzload.Config{
-    Algorithm: fuzzload.AlgoFuzzLoad,
+    Algorithm:  fuzzload.AlgoFuzzLoad,
+    AdminToken: os.Getenv("FUZZLOAD_ADMIN_TOKEN"),
     Upstreams: []fuzzload.UpstreamSpec{
         {ID: "worker-a", URL: "http://10.0.1.11:8080", CapacityCores: 4},
         {ID: "worker-b", URL: "http://10.0.1.12:8080", CapacityCores: 2},
     },
 })
 proxy.StartAutoControlLoop(context.Background(), fuzzload.DefaultAdaptiveConfig())
-http.ListenAndServe(":8080", proxy.ControlMux()) // 7.5 ns/op · 0 allocs/op`,
+http.ListenAndServe(":8080", proxy.ControlMux()) // 4.8-7.5 ns/op · 0 allocs/op`,
   },
   cli: {
     label: "CLI GATEWAY",
-    code: `# Start FuzzLoad Reverse Proxy + ANFIS/GP Control Plane in front of any servers
-pip install -e ./backend
+    code: `# 1. Start Go Data Plane Proxy (standalone pure-Go or Python-coupled)
+go install github.com/tanisheesh/FuzzLoad/proxy-go/cmd/fuzzload-proxy@v1.0.1
+fuzzload-proxy --port 8080 --upstreams "http://10.0.1.11:8080,http://10.0.1.12:8080" --standalone-auto
 
-fuzzload start \\
-  --upstreams "http://10.0.1.11:8080,http://10.0.1.12:8080,http://10.0.1.13:8080" \\
-  --policy fuzzload \\
-  --port 8000`,
+# 2. Or run Python ANFIS+GP Control Plane, live prober & 5-policy benchmark
+pip install -e ./backend
+fuzzload start --port 8000 --policy fuzzload
+fuzzload probe --urls "https://httpbin.org/get,https://httpbin.org/delay/1"
+fuzzload bench`,
   },
   sdk: {
     label: "PYTHON SDK",
@@ -47,8 +50,9 @@ router = FuzzLoadRouter(
     ]
 )
 
-target = router.select_upstream()                 # <0.1ms atomic lookup
-router.record_telemetry("worker-a", latency_ms=18.4, cpu=0.31, mem=0.28)`,
+target = router.select_upstream()                 # probabilistic ANFIS+GP pick
+router.record_telemetry("worker-a", latency_ms=18.4, cpu=0.31, mem=0.28)
+result = router.forward_request("/health")        # live HTTP forward + auto-adapt`,
   },
   docker: {
     label: "DOCKER COMPOSE",
@@ -56,8 +60,9 @@ router.record_telemetry("worker-a", latency_ms=18.4, cpu=0.31, mem=0.28)`,
 cd FuzzLoad
 docker compose up -d --build
 
-# Send traffic through the Go Data Plane Proxy (:8080)
-curl -i http://localhost:8080/work`,
+# Send traffic through Go Data Plane (:8080) & inspect Prometheus /metrics
+curl -i http://localhost:8080/work
+curl -s http://localhost:8080/metrics | grep fuzzload_node_routing_weight`,
   },
 };
 
@@ -118,6 +123,14 @@ export default function LandingPage() {
               <Link href="/playground" className="brutal-btn w-full sm:w-auto">
                 BENCHMARK ANY URL →
               </Link>
+              <a
+                href="https://pkg.go.dev/github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="brutal-btn w-full sm:w-auto"
+              >
+                GO SDK DOCS ↗
+              </a>
               <Link href="/how-it-works" className="brutal-btn w-full sm:w-auto">
                 READ MATH SPEC
               </Link>
@@ -190,9 +203,9 @@ export default function LandingPage() {
         {/* METRICS STRIP */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-x border-b border-[#222220] bg-[#0b0b0b]">
           {[
-            { num: "7.5 ns", label: "GO ATOMIC PROXY LOOKUP", sub: "0 B/op · 0 allocs/op (verified CI)" },
+            { num: "4.8 ns", label: "GO ATOMIC PROXY LOOKUP", sub: "0 B/op · 0 allocs/op (verified CI)" },
             { num: "-69.5%", label: "P95 TAIL LATENCY DROP", sub: "34.2ms vs 112.4ms Round Robin" },
-            { num: "500ms", label: "ANFIS BACKPROP INTERVAL", sub: "Online gradient descent on (c, σ, w)" },
+            { num: "500ms", label: "ANFIS + PURE-GO ADAPTATION", sub: "Online backprop + standalone Go SDK" },
             { num: "0.974", label: "JAIN'S FAIRNESS INDEX", sub: "Capacity-normalized load distribution" },
           ].map((m, idx) => (
             <div
@@ -360,7 +373,9 @@ export default function LandingPage() {
             </div>
 
             <div className="mt-6 pt-4 border-t border-[#222220] flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
-              <span className="text-[#88857e]">Reproduce via `python bench/run_benchmark.py`</span>
+              <span className="text-[#88857e]">
+                Reproduce via `python bench/run_benchmark.py` or `--live-go`
+              </span>
               <Link href="/dashboard" className="text-[#ff5500] font-bold hover:underline">
                 RUN LIVE IN CONSOLE →
               </Link>

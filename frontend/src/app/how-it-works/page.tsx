@@ -132,6 +132,41 @@ export default function HowItWorksPage() {
           ))}
         </section>
 
+        {/* LOCK-FREE GO DATA PLANE & SDK SPECIFICATION */}
+        <section className="panel-frame">
+          <div className="panel-header">
+            <span>DATA PLANE (GO 1.23) // PUBLISHED SDK: proxy-go/pkg/fuzzload@v1.0.1</span>
+            <span>4.8–7.5 ns/op · 0 B/op · 0 allocs/op</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-[#222220] font-mono text-xs">
+            <div className="p-5 space-y-2">
+              <div className="text-[10px] text-[#ff5500] font-bold uppercase">
+                [01] COPY-ON-WRITE ATOMIC ROUTING
+              </div>
+              <p className="font-sans text-xs text-[#88857e] leading-relaxed">
+                <strong className="text-[#f2efe9]">SelectUpstream()</strong> reads an immutable{" "}
+                <code className="text-[#00e676]">atomic.Pointer[routingTable]</code> CDF snapshot with zero mutex locks and zero heap allocations, returning <code className="text-[#f2efe9]">503</code> when all nodes are offline.
+              </p>
+            </div>
+            <div className="p-5 space-y-2">
+              <div className="text-[10px] text-[#ff5500] font-bold uppercase">
+                [02] RING BUFFER + CIRCUIT BREAKER
+              </div>
+              <p className="font-sans text-xs text-[#88857e] leading-relaxed">
+                Records per-request latency into a lock-free <code className="text-[#00e676]">[128]atomic.Uint64</code> ring buffer, exposes Prometheus <code className="text-[#f2efe9]">/metrics</code>, preserves WebSocket/SSE via <code className="text-[#f2efe9]">Unwrap()</code>, and auto-recovers tripped nodes after cooldown.
+              </p>
+            </div>
+            <div className="p-5 space-y-2">
+              <div className="text-[10px] text-[#ff5500] font-bold uppercase">
+                [03] STANDALONE PURE-GO OR COUPLED
+              </div>
+              <p className="font-sans text-xs text-[#88857e] leading-relaxed">
+                Run standalone via <code className="text-[#00e676]">StartAutoControlLoop()</code> (9-rule Gaussian Neuro-Fuzzy + symbolic GP inside Go) or pair with Python ANFIS over authorized <code className="text-[#f2efe9]">AdminHandler()</code> routes.
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* CTA */}
         <div className="panel-frame p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
