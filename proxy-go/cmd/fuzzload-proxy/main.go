@@ -232,11 +232,15 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		_ = srv.Shutdown(shutdownCtx)
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("[FuzzLoad Go Data Plane] graceful shutdown error: %v", err)
+		}
 	}()
 
 	log.Printf("[FuzzLoad Go Data Plane] Reverse Proxy listening on :%s (policy=%s, upstreams=%d, workers=%v)",
@@ -244,4 +248,5 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("proxy server failed: %v", err)
 	}
+	<-shutdownDone
 }

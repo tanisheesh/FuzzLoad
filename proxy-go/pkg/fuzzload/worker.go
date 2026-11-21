@@ -79,7 +79,11 @@ func StartSimulatedWorker(ctx context.Context, n *UpstreamNode) {
 	})
 
 	addr := fmt.Sprintf(":%d", n.Port)
-	srv := &http.Server{Addr: addr, Handler: mux}
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

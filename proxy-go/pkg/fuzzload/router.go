@@ -1,6 +1,7 @@
 package fuzzload
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -8,7 +9,9 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -44,9 +47,10 @@ type UpstreamSpec struct {
 
 // Config configures a FuzzLoad reverse proxy / load-balancing router instance.
 type Config struct {
-	Algorithm string
-	Upstreams []UpstreamSpec
-	Health    HealthConfig
+	Algorithm  string
+	Upstreams  []UpstreamSpec
+	Health     HealthConfig
+	AdminToken string // Optional bearer token protecting POST /api/weights and POST /api/chaos
 }
 
 // UpstreamNode represents a live upstream server with lock-free hot-path counters.
@@ -117,11 +121,12 @@ type routingTable struct {
 // Proxy is a lock-free L7 HTTP reverse proxy and embeddable Go SDK router.
 // It implements http.Handler directly for drop-in use with net/http, Gin, or Chi.
 type Proxy struct {
-	nodes     []*UpstreamNode
-	healthCfg HealthConfig
-	table     atomic.Pointer[routingTable]
-	rrCounter atomic.Uint64
-	updateMu  sync.Mutex
+	nodes      []*UpstreamNode
+	healthCfg  HealthConfig
+	adminToken string
+	table      atomic.Pointer[routingTable]
+	rrCounter  atomic.Uint64
+	updateMu   sync.Mutex
 }
 
 // NewProxy constructs a new lock-free FuzzLoad Proxy from the provided Config.
@@ -138,10 +143,15 @@ func NewProxy(cfg Config) (*Proxy, error) {
 	if healthCfg.FailureThreshold == 0 && healthCfg.Interval == 0 && !healthCfg.Enabled {
 		healthCfg = DefaultHealthConfig()
 	}
+	adminToken := cfg.AdminToken
+	if adminToken == "" {
+		adminToken = strings.TrimSpace(os.Getenv("FUZZLOAD_ADMIN_TOKEN"))
+	}
 
 	p := &Proxy{
-		nodes:     make([]*UpstreamNode, 0, len(cfg.Upstreams)),
-		healthCfg: healthCfg,
+		nodes:      make([]*UpstreamNode, 0, len(cfg.Upstreams)),
+		healthCfg:  healthCfg,
+		adminToken: adminToken,
 	}
 
 	defaultWeight := 1.0 / float64(len(cfg.Upstreams))
@@ -207,12 +217,9 @@ func NewProxy(cfg Config) (*Proxy, error) {
 		node.Latency.Seed(18.0, 20.0, 22.0)
 
 		captured := node
+		// ErrorHandler only writes 502; ServeHTTP's deferred accounting is the single owner
+		// of ErrorsCount and circuit-breaker failure tracking so errors are never double-counted.
 		rp.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
-			captured.ErrorsCount.Add(1)
-			captured.Latency.Record(250.0)
-			if captured.RecordFailure(p.healthCfg.FailureThreshold, p.healthCfg.Cooldown) {
-				p.rebuildRoutingTable()
-			}
 			http.Error(w, fmt.Sprintf("fuzzload upstream error on %s: %v", captured.ID, err), http.StatusBadGateway)
 		}
 
@@ -239,9 +246,6 @@ func (p *Proxy) buildTable(algo string) *routingTable {
 		if n.IsAvailable() {
 			healthy = append(healthy, n)
 		}
-	}
-	if len(healthy) == 0 {
-		healthy = append(healthy, p.nodes[0])
 	}
 
 	cdf := make([]float64, len(healthy))
@@ -323,11 +327,15 @@ func (p *Proxy) SetNodeChaos(nodeID string, state ChaosState) bool {
 }
 
 // SelectUpstream picks the next target upstream node using the lock-free atomic snapshot.
+// Returns nil when all upstream nodes are offline or circuit-broken.
 // Hot-path execution requires 0 locks and 0 heap allocations.
 func (p *Proxy) SelectUpstream() *UpstreamNode {
 	tbl := p.table.Load()
 	healthy := tbl.healthy
 	nLen := len(healthy)
+	if nLen == 0 {
+		return nil
+	}
 	if nLen == 1 {
 		return healthy[0]
 	}
@@ -365,7 +373,8 @@ func (p *Proxy) SelectUpstream() *UpstreamNode {
 	}
 }
 
-// statusCaptureWriter intercepts upstream HTTP status codes for passive circuit breaking.
+// statusCaptureWriter intercepts upstream HTTP status codes for passive circuit breaking
+// while preserving ResponseController access (Flusher, Hijacker) via Unwrap().
 type statusCaptureWriter struct {
 	http.ResponseWriter
 	statusCode int
@@ -376,9 +385,20 @@ func (sw *statusCaptureWriter) WriteHeader(code int) {
 	sw.ResponseWriter.WriteHeader(code)
 }
 
+// Unwrap exposes the underlying http.ResponseWriter for Go 1.20+ ResponseController
+// (WebSocket upgrades and SSE streaming flushes).
+func (sw *statusCaptureWriter) Unwrap() http.ResponseWriter {
+	return sw.ResponseWriter
+}
+
 // ServeHTTP forwards incoming HTTP requests to the selected upstream node while recording lock-free telemetry.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	target := p.SelectUpstream()
+	if target == nil {
+		http.Error(w, "fuzzload: no healthy upstream nodes available", http.StatusServiceUnavailable)
+		return
+	}
+
 	target.ActiveConnections.Add(1)
 	target.RequestsServed.Add(1)
 	start := time.Now()
@@ -395,9 +415,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			target.ErrorsCount.Add(1)
 			if target.RecordFailure(p.healthCfg.FailureThreshold, p.healthCfg.Cooldown) {
 				p.rebuildRoutingTable()
+				p.scheduleRecoveryRefresh(p.healthCfg.Cooldown)
 			}
 		} else {
-			target.RecordSuccess()
+			if target.RecordSuccess() {
+				p.rebuildRoutingTable()
+			}
 		}
 	}()
 
@@ -443,43 +466,70 @@ func (p *Proxy) TelemetrySnapshots() []NodeTelemetrySnapshot {
 	return out
 }
 
-// ControlMux returns an HTTP handler exposing both data-plane proxying and control-plane endpoints:
-//   - GET  /healthz
-//   - GET  /metrics
-//   - GET  /api/telemetry
-//   - POST /api/weights
-//   - POST /api/chaos
-//   - /*   -> reverse proxy via SelectUpstream()
+func (p *Proxy) isAdminAuthorized(r *http.Request) bool {
+	if p.adminToken != "" {
+		auth := r.Header.Get("Authorization")
+		expected := "Bearer " + p.adminToken
+		return subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) == 1
+	}
+	// When no AdminToken is configured, restrict mutating control endpoints to loopback callers.
+	remote := r.RemoteAddr
+	return strings.HasPrefix(remote, "127.0.0.1:") ||
+		strings.HasPrefix(remote, "[::1]:") ||
+		remote == "127.0.0.1" ||
+		remote == "::1" ||
+		remote == ""
+}
+
+// AdminHandler exposes only the control and observability routes (/healthz, /metrics,
+// /api/telemetry, /api/weights, /api/chaos) so operators can mount them on a separate
+// internal port away from the public proxy listener.
+func (p *Proxy) AdminHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":    "ok",
+			"algorithm": p.Algorithm(),
+			"nodes":     len(p.nodes),
+		})
+	})
+	mux.HandleFunc("/metrics", p.HandlePrometheusMetrics)
+	mux.HandleFunc("/api/telemetry", p.handleTelemetry)
+	mux.HandleFunc("/api/weights", func(w http.ResponseWriter, r *http.Request) {
+		if !p.isAdminAuthorized(r) {
+			http.Error(w, "unauthorized admin request", http.StatusUnauthorized)
+			return
+		}
+		p.handleUpdateWeights(w, r)
+	})
+	mux.HandleFunc("/api/chaos", func(w http.ResponseWriter, r *http.Request) {
+		if !p.isAdminAuthorized(r) {
+			http.Error(w, "unauthorized admin request", http.StatusUnauthorized)
+			return
+		}
+		p.handleChaos(w, r)
+	})
+	return mux
+}
+
+// ControlMux returns an HTTP handler exposing both data-plane proxying and authorized
+// control-plane endpoints on a single port (POST /api/weights and POST /api/chaos require
+// Bearer FUZZLOAD_ADMIN_TOKEN or loopback origin).
 func (p *Proxy) ControlMux() http.Handler {
+	admin := p.AdminHandler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
 		switch r.URL.Path {
-		case "/healthz":
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"status":    "ok",
-				"algorithm": p.Algorithm(),
-				"nodes":     len(p.nodes),
-			})
-			return
-		case "/metrics":
-			p.HandlePrometheusMetrics(w, r)
-			return
-		case "/api/telemetry":
-			p.handleTelemetry(w, r)
-			return
-		case "/api/weights":
-			p.handleUpdateWeights(w, r)
-			return
-		case "/api/chaos":
-			p.handleChaos(w, r)
+		case "/healthz", "/metrics", "/api/telemetry", "/api/weights", "/api/chaos":
+			admin.ServeHTTP(w, r)
 			return
 		default:
 			p.ServeHTTP(w, r)

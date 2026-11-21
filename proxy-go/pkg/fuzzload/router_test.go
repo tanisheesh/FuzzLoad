@@ -198,6 +198,113 @@ func TestConcurrentReadsAndWeightSwapsRaceFree(t *testing.T) {
 	wg.Wait()
 }
 
+func TestAllNodesOfflineReturns503AndAdminAuth(t *testing.T) {
+	p, servers := newTestProxy(t, AlgoFuzzLoad)
+	defer func() {
+		for _, s := range servers {
+			s.Close()
+		}
+	}()
+
+	for _, n := range p.Nodes() {
+		p.SetNodeChaos(n.ID, ChaosState{Offline: true})
+	}
+	if got := p.SelectUpstream(); got != nil {
+		t.Fatalf("expected nil upstream when all nodes are offline, got %v", got.ID)
+	}
+
+	rec := httptest.NewRecorder()
+	p.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/work", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 when all nodes offline, got %d", rec.Code)
+	}
+
+	// Verify AdminToken authorization guard on POST /api/weights
+	pAuth, err := NewProxy(Config{
+		Algorithm:  AlgoFuzzLoad,
+		Upstreams:  []UpstreamSpec{{ID: "n1", URL: servers[0].URL}},
+		AdminToken: "secret-admin-key",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := pAuth.ControlMux()
+
+	unauthRec := httptest.NewRecorder()
+	unauthReq := httptest.NewRequest(http.MethodPost, "/api/weights", strings.NewReader(`{"algorithm":"round_robin"}`))
+	mux.ServeHTTP(unauthRec, unauthReq)
+	if unauthRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for unauthorized /api/weights, got %d", unauthRec.Code)
+	}
+
+	authRec := httptest.NewRecorder()
+	authReq := httptest.NewRequest(http.MethodPost, "/api/weights", strings.NewReader(`{"algorithm":"round_robin"}`))
+	authReq.Header.Set("Authorization", "Bearer secret-admin-key")
+	mux.ServeHTTP(authRec, authReq)
+	if authRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for authorized /api/weights, got %d", authRec.Code)
+	}
+}
+
+func TestPassiveCircuitBreakerCooldownRecoveryAndHalfOpenFailure(t *testing.T) {
+	failMode := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if failMode {
+			http.Error(w, "fail", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	p, err := NewProxy(Config{
+		Algorithm: AlgoFuzzLoad,
+		Upstreams: []UpstreamSpec{{ID: "only", URL: srv.URL, InitialWeight: 1.0}},
+		Health: HealthConfig{
+			Enabled:          false,
+			FailureThreshold: 2,
+			Cooldown:         60 * time.Millisecond,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Two 500s must trip the circuit (and record exactly 2 errors, not 4).
+	for i := 0; i < 2; i++ {
+		rec := httptest.NewRecorder()
+		p.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/work", nil))
+	}
+	if errs := p.Nodes()[0].ErrorsCount.Load(); errs != 2 {
+		t.Fatalf("expected exactly 2 recorded errors, got %d", errs)
+	}
+	if p.SelectUpstream() != nil {
+		t.Fatalf("expected circuit tripped during cooldown")
+	}
+
+	// Wait for passive recovery refresh after cooldown
+	time.Sleep(110 * time.Millisecond)
+	if p.SelectUpstream() == nil {
+		t.Fatalf("expected node eligible for half-open recovery after cooldown")
+	}
+
+	// Failed half-open attempt must immediately reopen circuit with fresh cooldown
+	rec := httptest.NewRecorder()
+	p.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/work", nil))
+	if p.SelectUpstream() != nil {
+		t.Fatalf("expected failed half-open attempt to re-open circuit immediately")
+	}
+
+	// Wait again, switch server to healthy, confirm full recovery
+	failMode = false
+	time.Sleep(110 * time.Millisecond)
+	okRec := httptest.NewRecorder()
+	p.ServeHTTP(okRec, httptest.NewRequest(http.MethodGet, "/work", nil))
+	if okRec.Code != http.StatusOK || p.Nodes()[0].circuitOpen.Load() {
+		t.Fatalf("expected 200 and closed circuit after successful half-open recovery")
+	}
+}
+
 func TestStandalonePureGoAdaptiveControlLoop(t *testing.T) {
 	p, servers := newTestProxy(t, AlgoFuzzLoad)
 	defer func() {
