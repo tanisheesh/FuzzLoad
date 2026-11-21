@@ -141,6 +141,7 @@ func main() {
 	policyFlag := flag.String("policy", os.Getenv("POLICY"), "Initial routing policy (fuzzload|anfis_only|weighted_round_robin|least_connections|round_robin)")
 	configFlag := flag.String("config", "", "Path to fuzzload.config.json")
 	spawnWorkers := flag.Bool("spawn-workers", true, "Spawn built-in heterogeneous Go worker nodes when using default cluster")
+	standaloneAuto := flag.Bool("standalone-auto", false, "Run pure-Go Neuro-Fuzzy + GP auto-adaptation loop inside Go (no Python control plane needed)")
 	loadgenRPS := flag.Int64("loadgen-rps", 0, "Optional internal HTTP load generator RPS against the proxy (0 disables)")
 	flag.Parse()
 
@@ -179,6 +180,9 @@ func main() {
 	}
 
 	proxy.StartHealthProber(ctx)
+	if *standaloneAuto {
+		proxy.StartAutoControlLoop(ctx, fuzzload.DefaultAdaptiveConfig())
+	}
 
 	var rpsAtomic atomic.Int64
 	rpsAtomic.Store(*loadgenRPS)

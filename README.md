@@ -12,6 +12,9 @@
   <a href="https://fuzzload.tanisheesh.in">
     <img src="https://img.shields.io/badge/live_demo-FF5500-FF5500?style=flat-square" alt="Live Demo">
   </a>
+  <a href="https://pkg.go.dev/github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload">
+    <img src="https://img.shields.io/badge/Go_SDK-pkg.go.dev-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go Reference">
+  </a>
   <img src="https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go">
   <img src="https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI">

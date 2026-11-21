@@ -198,6 +198,45 @@ func TestConcurrentReadsAndWeightSwapsRaceFree(t *testing.T) {
 	wg.Wait()
 }
 
+func TestStandalonePureGoAdaptiveControlLoop(t *testing.T) {
+	p, servers := newTestProxy(t, AlgoFuzzLoad)
+	defer func() {
+		for _, s := range servers {
+			s.Close()
+		}
+	}()
+
+	// Simulate severe degradation on node-2 (high latency + high CPU) while node-1 stays fast
+	nodes := p.Nodes()
+	for i := 0; i < 64; i++ {
+		nodes[0].Latency.Record(16.0)
+		nodes[1].Latency.Record(215.0)
+		nodes[2].Latency.Record(28.0)
+		nodes[3].Latency.Record(42.0)
+	}
+	nodes[0].SetCPU(0.18)
+	nodes[1].SetCPU(0.94)
+	nodes[2].SetCPU(0.32)
+	nodes[3].SetCPU(0.45)
+
+	cfg := DefaultAdaptiveConfig()
+	var weights map[string]float64
+	for step := 0; step < 5; step++ {
+		weights = p.RecomputeAdaptiveWeights(cfg)
+	}
+
+	if weights["node-1"] <= weights["node-2"]*3.0 {
+		t.Fatalf("expected standalone pure-Go Neuro-Fuzzy+GP loop to drain degraded node-2 heavily; got %v", weights)
+	}
+	sum := 0.0
+	for _, w := range weights {
+		sum += w
+	}
+	if sum < 0.99 || sum > 1.01 {
+		t.Fatalf("expected normalized weights summing to ~1.0, got %.4f (%v)", sum, weights)
+	}
+}
+
 func BenchmarkSelectUpstreamFuzzLoad(b *testing.B) {
 	p, err := NewProxy(Config{
 		Algorithm: AlgoFuzzLoad,

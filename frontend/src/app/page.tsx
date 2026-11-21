@@ -8,7 +8,9 @@ import Footer from "@/components/Footer";
 const QUICKSTART_TABS = {
   gosdk: {
     label: "GO SDK",
-    code: `import (
+    code: `// go get github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload@v1.0.0
+import (
+    "context"
     "net/http"
     "github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload"
 )
@@ -20,7 +22,8 @@ proxy, _ := fuzzload.NewProxy(fuzzload.Config{
         {ID: "worker-b", URL: "http://10.0.1.12:8080", CapacityCores: 2},
     },
 })
-http.ListenAndServe(":8080", proxy.ControlMux()) // 0 allocs/op lookup`,
+proxy.StartAutoControlLoop(context.Background(), fuzzload.DefaultAdaptiveConfig())
+http.ListenAndServe(":8080", proxy.ControlMux()) // 7.5 ns/op · 0 allocs/op`,
   },
   cli: {
     label: "CLI GATEWAY",
