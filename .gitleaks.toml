@@ -4,7 +4,7 @@ title = "FuzzLoad Gitleaks Config"
 [extend]
 useDefault = true
 
-[[allowlists]]
+[allowlist]
 description = "Ignore Recharts JSX dataKey telemetry field names (false positive for generic-api-key)"
 regexTarget = "line"
 regexes = [
