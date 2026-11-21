@@ -37,7 +37,7 @@ Traditional reverse-proxy load balancers rely on static heuristics like Round Ro
 
 - **5-Layer Neuro-Fuzzy (ANFIS) Controller** — Fuzzifies noisy server telemetry (`CPU`, `RAM`, `Latency`, `Connections`) into Gaussian membership curves and trains rule weights online via gradient descent every 500ms.
 - **Genetic Programming (GP) Symbolic Optimizer** — Evolves mathematical expression trees (`DEAP`) over a 60-second Digital Twin traffic replay buffer to discover optimal non-linear routing heuristics without risking live traffic.
-- **High-Throughput Go Reverse Proxy** — Lock-free atomic routing table (`httputil.ReverseProxy`) supporting hot-swappable algorithms (`Round Robin`, `Least Connections`, `Weighted RR`, `ANFIS-Only`, and `FuzzLoad GP+ANFIS`) with `<0.2ms` routing overhead.
+- **High-Throughput Go Reverse Proxy & SDK (`proxy-go/pkg/fuzzload`)** — Lock-free Copy-on-Write (`atomic.Pointer`) routing table and zero-allocation latency ring buffer (`7.49 ns/op`, `0 B/op`, `0 allocs/op` verified in CI) with passive circuit breaking, Prometheus `/metrics`, and hot-swappable algorithms (`Round Robin`, `Least Connections`, `Weighted RR`, `ANFIS-Only`, and `FuzzLoad GP+ANFIS`).
 - **Interactive Chaos & Topology Dashboard** — Visualize real-time packet routing, fuzzy membership shifts, GP syntax tree evolution, and P95/P99 tail-latency benchmarks while injecting synthetic CPU spikes or network lag.
 
 ---

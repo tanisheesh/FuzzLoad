@@ -55,9 +55,10 @@ jobs:
           echo "Detected → golang=$golang python=$python node=$node pnpm=$pnpm"
 
       - if: steps.detect.outputs.golang == 'true'
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_DEFAULT_VERSION }}
+          cache: false
 
       - if: steps.detect.outputs.node == 'true'
         uses: actions/setup-node@v7

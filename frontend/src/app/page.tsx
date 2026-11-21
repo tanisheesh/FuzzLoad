@@ -187,7 +187,7 @@ export default function LandingPage() {
         {/* METRICS STRIP */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-x border-b border-[#222220] bg-[#0b0b0b]">
           {[
-            { num: "< 0.2ms", label: "GO ATOMIC PROXY LOOKUP", sub: "Zero neural inference on hot path" },
+            { num: "7.5 ns", label: "GO ATOMIC PROXY LOOKUP", sub: "0 B/op · 0 allocs/op (verified CI)" },
             { num: "-69.5%", label: "P95 TAIL LATENCY DROP", sub: "34.2ms vs 112.4ms Round Robin" },
             { num: "500ms", label: "ANFIS BACKPROP INTERVAL", sub: "Online gradient descent on (c, σ, w)" },
             { num: "0.974", label: "JAIN'S FAIRNESS INDEX", sub: "Capacity-normalized load distribution" },

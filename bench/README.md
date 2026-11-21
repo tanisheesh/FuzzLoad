@@ -15,7 +15,17 @@ python bench/run_benchmark.py --live-go --proxy-url http://127.0.0.1:8080 --requ
 cd proxy-go && go test -v -race ./... && go test -run=^$ -bench=. -benchmem ./pkg/fuzzload
 ```
 
-## Results
+## Go Data-Plane Hot-Path Microbenchmarks (GitHub Actions CI — Intel Xeon Platinum 8573C)
+
+```text
+BenchmarkSelectUpstreamFuzzLoad-4   160513838   7.489 ns/op   0 B/op   0 allocs/op
+BenchmarkLatencyRingRecord-4         26850603   45.07 ns/op   0 B/op   0 allocs/op
+```
+
+- **Target Selection (`SelectUpstream`):** `7.489 ns/op` (`~133M lookups/sec` across 4 cores) with **0 locks and 0 heap allocations** via `atomic.Pointer` Copy-on-Write CDF snapshots.
+- **Latency Ring Buffer (`LatencyRing.Record`):** `45.07 ns/op` with **0 heap allocations**; P50/P95/P99 sorting happens strictly on `/api/telemetry` or `/metrics` scrape.
+
+## Multi-Algorithm Cluster Results
 
 | Algorithm | P50 (ms) | P95 Tail (ms) | P99 (ms) | Throughput (RPS) | Error Rate (%) | Jain's Fairness |
 |---|---:|---:|---:|---:|---:|---:|
