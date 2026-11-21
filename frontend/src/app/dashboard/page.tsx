@@ -298,7 +298,20 @@ export default function LiveDemoDashboardPage() {
         <div className="max-w-[1400px] mx-auto px-3 sm:px-6 lg:px-8 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 font-mono text-xs">
           <div className="flex flex-wrap items-center gap-2">
             <span className="px-2.5 py-1 border border-[#00e676] text-[#00e676] text-[10px] sm:text-[11px] font-bold">
-              ● {backendLive ? "DAEMON: CONNECTED (:8000)" : "ENGINE: DIGITAL TWIN (500ms)"}
+              ● {backendLive ? "CONTROL PLANE: LIVE (:8000)" : "ENGINE: DIGITAL TWIN (500ms)"}
+            </span>
+            <span
+              className={`px-2.5 py-1 border text-[10px] sm:text-[11px] font-bold ${
+                backendLive && state.go_proxy_connected
+                  ? "border-[#00e676] bg-[#00e676]/10 text-[#00e676]"
+                  : "border-[#3a3834] text-[#88857e]"
+              }`}
+            >
+              {backendLive && state.go_proxy_connected
+                ? state.telemetry_source === "go_proxy_live"
+                  ? "DATA PLANE: GO PROXY (:8080) LIVE TRAFFIC"
+                  : "DATA PLANE: GO PROXY (:8080) COUPLED"
+                : "DATA PLANE: SIMULATED CLUSTER"}
             </span>
             {exportBanner && (
               <span className="px-2.5 py-1 bg-[#ff5500] text-[#080808] font-bold text-[10px] sm:text-[11px]">

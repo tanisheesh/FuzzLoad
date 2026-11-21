@@ -21,6 +21,7 @@ from app.ai_engine.gp_optimizer import (
 )
 from app.cli import FuzzLoadRouter
 from app.cluster.simulator import FuzzLoadClusterController
+from fuzzload import FuzzLoadRouter as PublicFuzzLoadRouter
 
 
 def test_mcculloch_pitts_and_bpn_xor() -> None:
@@ -155,7 +156,8 @@ def test_cluster_controller_chaos_and_algorithms() -> None:
 
 
 def test_fuzzload_router_sdk() -> None:
-    router = FuzzLoadRouter(
+    assert PublicFuzzLoadRouter is FuzzLoadRouter
+    router = PublicFuzzLoadRouter(
         upstreams=[
             {"id": "fast-node", "url": "http://127.0.0.1:4001", "cores": 4.0},
             {"id": "slow-node", "url": "http://127.0.0.1:4002", "cores": 1.0},
@@ -167,6 +169,72 @@ def test_fuzzload_router_sdk() -> None:
     assert weights["fast-node"] > weights["slow-node"]
     chosen = router.select_upstream()
     assert chosen in ("http://127.0.0.1:4001", "http://127.0.0.1:4002")
+
+
+def test_bidirectional_go_proxy_sync_mock() -> None:
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    received_weights: list[dict] = []
+    received_chaos: list[dict] = []
+
+    class MockGoProxyHandler(BaseHTTPRequestHandler):
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+        def do_GET(self) -> None:
+            if self.path == "/api/telemetry":
+                body = json.dumps(
+                    {
+                        "algorithm": "fuzzload",
+                        "nodes": [
+                            {"node_id": "node-1", "active_connections": 6, "requests_served": 240, "cpu_usage": 0.22, "mem_usage": 0.30, "p50_latency_ms": 14.2, "p95_latency_ms": 21.5, "p99_latency_ms": 28.0, "error_rate": 0.0},
+                            {"node_id": "node-2", "active_connections": 28, "requests_served": 110, "cpu_usage": 0.89, "mem_usage": 0.72, "p50_latency_ms": 95.0, "p95_latency_ms": 152.0, "p99_latency_ms": 188.0, "error_rate": 0.05},
+                            {"node_id": "node-3", "active_connections": 9, "requests_served": 180, "cpu_usage": 0.35, "mem_usage": 0.32, "p50_latency_ms": 19.0, "p95_latency_ms": 29.0, "p99_latency_ms": 38.0, "error_rate": 0.0},
+                            {"node_id": "node-4", "active_connections": 4, "requests_served": 90, "cpu_usage": 0.41, "mem_usage": 0.35, "p50_latency_ms": 25.0, "p95_latency_ms": 38.0, "p99_latency_ms": 48.0, "error_rate": 0.0},
+                        ],
+                    }
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(body)
+
+        def do_POST(self) -> None:
+            length = int(self.headers.get("Content-Length", "0"))
+            data = json.loads(self.rfile.read(length).decode("utf-8"))
+            if self.path == "/api/weights":
+                received_weights.append(data)
+            elif self.path == "/api/chaos":
+                received_chaos.append(data)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok"}')
+
+    server = HTTPServer(("127.0.0.1", 0), MockGoProxyHandler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        ctrl = FuzzLoadClusterController()
+        ctrl.go_proxy_url = f"http://127.0.0.1:{port}"
+        state = ctrl.step_fast_loop(sync_go=True)
+        assert state["go_proxy_connected"] is True
+        assert state["telemetry_source"] == "go_proxy_live"
+        assert len(received_weights) >= 1
+        by_id = {n["node_id"]: n for n in state["nodes"]}
+        assert by_id["node-1"]["requests_served"] == 240
+        assert by_id["node-2"]["p95_latency_ms"] == 152.0
+
+        ctrl.inject_chaos("node-2", "cpu_spike", True)
+        assert len(received_chaos) >= 1
+        assert received_chaos[-1]["node_id"] == "node-2"
+        assert received_chaos[-1]["chaos"]["cpu_spike"] is True
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 class FuzzLoadTestSuite(unittest.TestCase):

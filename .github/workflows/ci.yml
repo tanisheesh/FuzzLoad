@@ -19,9 +19,10 @@ permissions:
   contents: read
 
 env:
-  CI_DIRS: "backend frontend"
+  CI_DIRS: "proxy-go backend frontend"
   NODE_DEFAULT_VERSION: "22"
   PYTHON_DEFAULT_VERSION: "3.12"
+  GO_DEFAULT_VERSION: "1.23"
   NEXT_PUBLIC_API_URL: "http://localhost:8000"
 
 jobs:
@@ -35,22 +36,28 @@ jobs:
       - name: Detect stacks
         id: detect
         run: |
-          node=false; bun=false; pnpm=false; python=false
+          node=false; bun=false; pnpm=false; python=false; golang=false
           for d in $CI_DIRS; do
             [ -f "$d/package.json" ] && node=true
             { [ -f "$d/bun.lockb" ] || [ -f "$d/bun.lock" ]; } && bun=true
             [ -f "$d/pnpm-lock.yaml" ] && pnpm=true
             { [ -f "$d/pyproject.toml" ] || [ -f "$d/requirements.txt" ] || [ -f "$d/setup.py" ]; } && python=true
+            [ -f "$d/go.mod" ] && golang=true
           done
           node_version="$NODE_DEFAULT_VERSION"
           for f in .nvmrc .node-version; do [ -f "$f" ] && node_version="$(tr -d 'v \n' < "$f")"; done
           python_version="$PYTHON_DEFAULT_VERSION"
           [ -f .python-version ] && python_version="$(tr -d ' \n' < .python-version)"
           {
-            echo "node=$node"; echo "bun=$bun"; echo "pnpm=$pnpm"; echo "python=$python"
+            echo "node=$node"; echo "bun=$bun"; echo "pnpm=$pnpm"; echo "python=$python"; echo "golang=$golang"
             echo "node_version=$node_version"; echo "python_version=$python_version"
           } >> "$GITHUB_OUTPUT"
-          echo "Detected → node=$node bun=$bun pnpm=$pnpm python=$python"
+          echo "Detected → golang=$golang python=$python node=$node pnpm=$pnpm"
+
+      - if: steps.detect.outputs.golang == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_DEFAULT_VERSION }}
 
       - if: steps.detect.outputs.node == 'true'
         uses: actions/setup-node@v7
@@ -77,6 +84,21 @@ jobs:
               const s = (require("./package.json").scripts || {})[process.argv[1]];
               process.exit(s && !/no test specified/.test(s) ? 0 : 1);
             ' "$1"
+          }
+
+          run_go() {
+            echo "::group::go vet"
+            go vet ./...
+            echo "::endgroup::"
+            echo "::group::go test -race"
+            go test -v -race ./...
+            echo "::endgroup::"
+            echo "::group::go bench"
+            go test -run=^$ -bench=. -benchmem ./pkg/fuzzload
+            echo "::endgroup::"
+            echo "::group::go build"
+            go build -o /tmp/fuzzload-proxy ./cmd/fuzzload-proxy
+            echo "::endgroup::"
           }
 
           run_node() {
@@ -116,9 +138,10 @@ jobs:
             echo "━━━ $d ━━━"
             ( cd "$d"
               ran=false
+              if [ -f go.mod ]; then run_go; ran=true; fi
               if [ -f package.json ]; then run_node; ran=true; fi
               if [ -f pyproject.toml ] || [ -f requirements.txt ] || [ -f setup.py ]; then run_python; ran=true; fi
-              if [ "$ran" = false ]; then echo "No Node or Python project found in '$d', skipping."; fi
+              if [ "$ran" = false ]; then echo "No Go, Node, or Python project found in '$d', skipping."; fi
             )
           done
 

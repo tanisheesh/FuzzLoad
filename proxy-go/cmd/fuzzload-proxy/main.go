@@ -1,375 +1,243 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
+	"io"
 	"log"
-	"math"
-	"math/rand"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
-	"sort"
-	"sync"
+	"os/signal"
+	"strconv"
+	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
+
+	"github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload"
 )
 
-// ChaosState represents active synthetic faults on a backend worker node.
-type ChaosState struct {
-	CPUSpike bool `json:"cpu_spike"`
-	MemLeak  bool `json:"mem_leak"`
-	IOLag    bool `json:"io_lag"`
-	Offline  bool `json:"offline"`
+type fileConfig struct {
+	Policy    string                  `json:"policy"`
+	Upstreams []fuzzload.UpstreamSpec `json:"upstreams"`
 }
 
-// WorkerNode represents a single heterogeneous backend server in the cluster.
-type WorkerNode struct {
-	ID                string     `json:"node_id"`
-	Name              string     `json:"name"`
-	Port              int        `json:"port"`
-	URL               *url.URL   `json:"-"`
-	Proxy             *httputil.ReverseProxy `json:"-"`
-	CapacityCores     float64    `json:"capacity_cores"`
-	StaticWeight      int        `json:"static_weight"`
-	ActiveConnections int64      `json:"active_connections"`
-	RequestsServed    uint64     `json:"requests_served"`
-	ErrorsCount       uint64     `json:"errors_count"`
-	CPUUsage          float64    `json:"cpu_usage"`
-	MemUsage          float64    `json:"mem_usage"`
-	P50LatencyMs      float64    `json:"p50_latency_ms"`
-	P95LatencyMs      float64    `json:"p95_latency_ms"`
-	P99LatencyMs      float64    `json:"p99_latency_ms"`
-	ErrorRate         float64    `json:"error_rate"`
-	RoutingWeight     float64    `json:"routing_weight"`
-	Chaos             ChaosState `json:"chaos"`
-
-	mu         sync.RWMutex
-	latencies  []float64
-}
-
-func (n *WorkerNode) recordLatency(ms float64, isErr bool) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.latencies = append(n.latencies, ms)
-	if len(n.latencies) > 120 {
-		n.latencies = n.latencies[len(n.latencies)-120:]
-	}
-	sorted := make([]float64, len(n.latencies))
-	copy(sorted, n.latencies)
-	sort.Float64s(sorted)
-	l := len(sorted)
-	if l > 0 {
-		n.P50LatencyMs = sorted[int(float64(l-1)*0.50)]
-		n.P95LatencyMs = sorted[int(float64(l-1)*0.95)]
-		n.P99LatencyMs = sorted[int(float64(l-1)*0.99)]
-	}
-	if isErr {
-		errs := atomic.AddUint64(&n.ErrorsCount, 1)
-		reqs := atomic.LoadUint64(&n.RequestsServed)
-		if reqs > 0 {
-			n.ErrorRate = float64(errs) / float64(reqs)
+func loadUpstreams(configPath, upstreamsFlag, weightsFlag string) ([]fuzzload.UpstreamSpec, string, error) {
+	if configPath != "" {
+		raw, err := os.ReadFile(configPath)
+		if err != nil {
+			return nil, "", fmt.Errorf("read config %s: %w", configPath, err)
 		}
-	} else {
-		errs := atomic.LoadUint64(&n.ErrorsCount)
-		reqs := atomic.LoadUint64(&n.RequestsServed)
-		if reqs > 0 {
-			n.ErrorRate = float64(errs) / float64(reqs)
+		var cfg fileConfig
+		if err := json.Unmarshal(raw, &cfg); err != nil {
+			return nil, "", fmt.Errorf("parse config %s: %w", configPath, err)
+		}
+		if len(cfg.Upstreams) == 0 {
+			return nil, "", fmt.Errorf("config %s contains no upstreams", configPath)
+		}
+		return cfg.Upstreams, cfg.Policy, nil
+	}
+
+	if strings.TrimSpace(upstreamsFlag) == "" {
+		return fuzzload.DefaultClusterSpecs(), "", nil
+	}
+
+	rawURLs := strings.Split(upstreamsFlag, ",")
+	var parsedWeights []float64
+	if strings.TrimSpace(weightsFlag) != "" {
+		for _, part := range strings.Split(weightsFlag, ",") {
+			if w, err := strconv.ParseFloat(strings.TrimSpace(part), 64); err == nil && w >= 0 {
+				parsedWeights = append(parsedWeights, w)
+			}
 		}
 	}
-}
 
-// FuzzLoadProxy manages the lock-free routing table and algorithm selection.
-type FuzzLoadProxy struct {
-	nodes     []*WorkerNode
-	algorithm string
-	rrCounter uint64
-	mu        sync.RWMutex
-}
-
-func NewFuzzLoadProxy() *FuzzLoadProxy {
-	specs := []struct {
-		id     string
-		name   string
-		port   int
-		cores  float64
-		weight int
-	}{
-		{"node-1", "Node-1 (4c Compute)", 9001, 4.0, 4},
-		{"node-2", "Node-2 (2c General)", 9002, 2.0, 2},
-		{"node-3", "Node-3 (2c Memory)", 9003, 2.0, 2},
-		{"node-4", "Node-4 (1c Edge)", 9004, 1.0, 1},
-	}
-
-	nodes := make([]*WorkerNode, 0, len(specs))
-	for _, s := range specs {
-		u, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", s.port))
-		proxy := httputil.NewSingleHostReverseProxy(u)
-		node := &WorkerNode{
-			ID:            s.id,
-			Name:          s.name,
-			Port:          s.port,
+	specs := make([]fuzzload.UpstreamSpec, 0, len(rawURLs))
+	for i, raw := range rawURLs {
+		u := strings.TrimSpace(raw)
+		if u == "" {
+			continue
+		}
+		w := 1.0 / float64(len(rawURLs))
+		if i < len(parsedWeights) {
+			w = parsedWeights[i]
+		}
+		specs = append(specs, fuzzload.UpstreamSpec{
+			ID:            fmt.Sprintf("node-%d", i+1),
+			Name:          fmt.Sprintf("Upstream-%d (%s)", i+1, u),
 			URL:           u,
-			Proxy:         proxy,
-			CapacityCores: s.cores,
-			StaticWeight:  s.weight,
-			CPUUsage:      0.18,
-			MemUsage:      0.24,
-			P50LatencyMs:  18.0,
-			P95LatencyMs:  28.0,
-			P99LatencyMs:  35.0,
-			RoutingWeight: 0.25,
-			latencies:     []float64{18.0, 20.0, 22.0},
-		}
-		proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
-			node.recordLatency(250.0, true)
-			http.Error(w, fmt.Sprintf("upstream error on %s: %v", node.ID, err), http.StatusBadGateway)
-		}
-		nodes = append(nodes, node)
-	}
-
-	return &FuzzLoadProxy{
-		nodes:     nodes,
-		algorithm: "fuzzload",
-	}
-}
-
-func (p *FuzzLoadProxy) selectNode() *WorkerNode {
-	p.mu.RLock()
-	algo := p.algorithm
-	nodes := p.nodes
-	p.mu.RUnlock()
-
-	healthy := make([]*WorkerNode, 0, len(nodes))
-	for _, n := range nodes {
-		n.mu.RLock()
-		offline := n.Chaos.Offline
-		n.mu.RUnlock()
-		if !offline {
-			healthy = append(healthy, n)
-		}
-	}
-	if len(healthy) == 0 {
-		return nodes[0]
-	}
-
-	switch algo {
-	case "round_robin":
-		idx := atomic.AddUint64(&p.rrCounter, 1) % uint64(len(healthy))
-		return healthy[idx]
-
-	case "least_connections":
-		best := healthy[0]
-		minConn := atomic.LoadInt64(&best.ActiveConnections)
-		for _, n := range healthy[1:] {
-			c := atomic.LoadInt64(&n.ActiveConnections)
-			if c < minConn {
-				minConn = c
-				best = n
-			}
-		}
-		return best
-
-	case "weighted_round_robin":
-		totalWeight := 0
-		for _, n := range healthy {
-			totalWeight += n.StaticWeight
-		}
-		pick := int(atomic.AddUint64(&p.rrCounter, 1)) % totalWeight
-		acc := 0
-		for _, n := range healthy {
-			acc += n.StaticWeight
-			if pick < acc {
-				return n
-			}
-		}
-		return healthy[0]
-
-	default: // "fuzzload" or "anfis_only" -> stochastic proportional routing using AI weights
-		total := 0.0
-		weights := make([]float64, len(healthy))
-		for i, n := range healthy {
-			n.mu.RLock()
-			w := math.Max(0.005, n.RoutingWeight)
-			n.mu.RUnlock()
-			weights[i] = w
-			total += w
-		}
-		r := rand.Float64() * total
-		acc := 0.0
-		for i, n := range healthy {
-			acc += weights[i]
-			if r <= acc {
-				return n
-			}
-		}
-		return healthy[len(healthy)-1]
-	}
-}
-
-func (p *FuzzLoadProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	switch r.URL.Path {
-	case "/api/telemetry":
-		p.handleTelemetry(w, r)
-		return
-	case "/api/weights":
-		p.handleUpdateWeights(w, r)
-		return
-	case "/api/chaos":
-		p.handleChaos(w, r)
-		return
-	}
-
-	target := p.selectNode()
-	atomic.AddInt64(&target.ActiveConnections, 1)
-	atomic.AddUint64(&target.RequestsServed, 1)
-	start := time.Now()
-
-	defer func() {
-		atomic.AddInt64(&target.ActiveConnections, -1)
-		elapsedMs := float64(time.Since(start).Microseconds()) / 1000.0
-		target.recordLatency(elapsedMs, false)
-	}()
-
-	w.Header().Set("X-FuzzLoad-Node", target.ID)
-	w.Header().Set("X-FuzzLoad-Algorithm", p.algorithm)
-	target.Proxy.ServeHTTP(w, r)
-}
-
-func (p *FuzzLoadProxy) handleTelemetry(w http.ResponseWriter, _ *http.Request) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"algorithm": p.algorithm,
-		"nodes":     p.nodes,
-		"timestamp": time.Now().UnixMilli(),
-	})
-}
-
-func (p *FuzzLoadProxy) handleUpdateWeights(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	var payload struct {
-		Algorithm string             `json:"algorithm"`
-		Weights   map[string]float64 `json:"weights"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	p.mu.Lock()
-	if payload.Algorithm != "" {
-		p.algorithm = payload.Algorithm
-	}
-	for _, n := range p.nodes {
-		if wVal, ok := payload.Weights[n.ID]; ok {
-			n.mu.Lock()
-			n.RoutingWeight = wVal
-			n.mu.Unlock()
-		}
-	}
-	p.mu.Unlock()
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
-}
-
-func (p *FuzzLoadProxy) handleChaos(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	var payload struct {
-		NodeID string     `json:"node_id"`
-		Chaos  ChaosState `json:"chaos"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	for _, n := range p.nodes {
-		if n.ID == payload.NodeID {
-			n.mu.Lock()
-			n.Chaos = payload.Chaos
-			n.mu.Unlock()
-			break
-		}
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "chaos_updated"})
-}
-
-func startWorkerNode(n *WorkerNode) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
-		n.mu.RLock()
-		chaos := n.Chaos
-		cores := n.CapacityCores
-		n.mu.RUnlock()
-
-		conns := float64(atomic.LoadInt64(&n.ActiveConnections))
-		baseDelayMs := 14.0 / math.Sqrt(cores)
-		queueDelayMs := (conns * conns) / (cores * 1.8)
-		if chaos.CPUSpike {
-			queueDelayMs += 95.0
-		}
-		if chaos.IOLag {
-			queueDelayMs += 130.0
-		}
-		totalMs := baseDelayMs + queueDelayMs + rand.Float64()*6.0
-		time.Sleep(time.Duration(totalMs) * time.Millisecond)
-
-		n.mu.Lock()
-		cpuBase := math.Min(0.98, 0.12+(conns/(cores*14.0)))
-		if chaos.CPUSpike {
-			cpuBase = math.Min(0.99, cpuBase+0.55)
-		}
-		memBase := math.Min(0.97, 0.22+(conns*0.015))
-		if chaos.MemLeak {
-			memBase = math.Min(0.98, memBase+0.50)
-		}
-		n.CPUUsage = cpuBase
-		n.MemUsage = memBase
-		n.mu.Unlock()
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"node_id":    n.ID,
-			"latency_ms": totalMs,
-			"status":     "ok",
+			CapacityCores: 2.0,
+			MemoryGB:      8.0,
+			StaticWeight:  2,
+			InitialWeight: w,
 		})
-	})
-
-	addr := fmt.Sprintf(":%d", n.Port)
-	log.Printf("[Worker %s] listening on %s (%.1f cores)", n.ID, addr, n.CapacityCores)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Printf("[Worker %s] stopped: %v", n.ID, err)
 	}
+	if len(specs) == 0 {
+		return fuzzload.DefaultClusterSpecs(), "", nil
+	}
+	return specs, "", nil
+}
+
+// startBackgroundLoadGen optionally generates real HTTP requests through the local Go proxy
+// so live socket telemetry flows continuously into the Python ANFIS + GP control plane.
+func startBackgroundLoadGen(ctx context.Context, proxyURL string, rpsTarget *atomic.Int64) {
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        128,
+			MaxIdleConnsPerHost: 128,
+		},
+	}
+
+	go func() {
+		ticker := time.NewTicker(50 * time.Millisecond) // 20 batches/sec
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				rps := rpsTarget.Load()
+				if rps <= 0 {
+					continue
+				}
+				batch := int(rps / 20)
+				if batch < 1 {
+					batch = 1
+				}
+				if batch > 40 {
+					batch = 40
+				}
+				for i := 0; i < batch; i++ {
+					go func() {
+						req, err := http.NewRequestWithContext(ctx, http.MethodGet, proxyURL+"/work", nil)
+						if err != nil {
+							return
+						}
+						resp, err := client.Do(req)
+						if err != nil {
+							return
+						}
+						_, _ = io.Copy(io.Discard, resp.Body)
+						_ = resp.Body.Close()
+					}()
+				}
+			}
+		}
+	}()
 }
 
 func main() {
-	proxy := NewFuzzLoadProxy()
-	for _, node := range proxy.nodes {
-		go startWorkerNode(node)
+	defaultPort := os.Getenv("GO_PROXY_PORT")
+	if defaultPort == "" {
+		defaultPort = "8080"
 	}
 
-	port := os.Getenv("GO_PROXY_PORT")
-	if port == "" {
-		port = "8080"
+	portFlag := flag.String("port", defaultPort, "Port for the FuzzLoad Go reverse proxy")
+	upstreamsFlag := flag.String("upstreams", os.Getenv("UPSTREAMS"), "Comma-separated upstream URLs")
+	weightsFlag := flag.String("weights", "", "Comma-separated initial routing weights matching --upstreams")
+	policyFlag := flag.String("policy", os.Getenv("POLICY"), "Initial routing policy (fuzzload|anfis_only|weighted_round_robin|least_connections|round_robin)")
+	configFlag := flag.String("config", "", "Path to fuzzload.config.json")
+	spawnWorkers := flag.Bool("spawn-workers", true, "Spawn built-in heterogeneous Go worker nodes when using default cluster")
+	loadgenRPS := flag.Int64("loadgen-rps", 0, "Optional internal HTTP load generator RPS against the proxy (0 disables)")
+	flag.Parse()
+
+	specs, filePolicy, err := loadUpstreams(*configFlag, *upstreamsFlag, *weightsFlag)
+	if err != nil {
+		log.Fatalf("failed to load upstreams: %v", err)
 	}
-	log.Printf("[FuzzLoad Go Data Plane] Reverse Proxy listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, proxy); err != nil {
+
+	algo := *policyFlag
+	if algo == "" {
+		algo = filePolicy
+	}
+	if algo == "" {
+		algo = fuzzload.AlgoFuzzLoad
+	}
+
+	proxy, err := fuzzload.NewProxy(fuzzload.Config{
+		Algorithm: algo,
+		Upstreams: specs,
+		Health:    fuzzload.DefaultHealthConfig(),
+	})
+	if err != nil {
+		log.Fatalf("failed to initialize FuzzLoad proxy: %v", err)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	useDefaultWorkers := *spawnWorkers && strings.TrimSpace(*upstreamsFlag) == "" && *configFlag == ""
+	if useDefaultWorkers {
+		for _, node := range proxy.Nodes() {
+			go fuzzload.StartSimulatedWorker(ctx, node)
+		}
+		// Give workers a brief moment to bind before starting active health probes.
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	proxy.StartHealthProber(ctx)
+
+	var rpsAtomic atomic.Int64
+	rpsAtomic.Store(*loadgenRPS)
+	if *loadgenRPS > 0 {
+		startBackgroundLoadGen(ctx, fmt.Sprintf("http://127.0.0.1:%s", *portFlag), &rpsAtomic)
+	} else {
+		// Always start dormant loadgen goroutine so POST /api/loadgen can enable it at runtime.
+		startBackgroundLoadGen(ctx, fmt.Sprintf("http://127.0.0.1:%s", *portFlag), &rpsAtomic)
+	}
+
+	baseHandler := proxy.ControlMux()
+	rootHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/loadgen" {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Content-Type", "application/json")
+			if r.Method == http.MethodGet {
+				_ = json.NewEncoder(w).Encode(map[string]any{"rps": rpsAtomic.Load()})
+				return
+			}
+			if r.Method == http.MethodPost {
+				var body struct {
+					RPS int64 `json:"rps"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				if body.RPS < 0 {
+					body.RPS = 0
+				}
+				if body.RPS > 1500 {
+					body.RPS = 1500
+				}
+				rpsAtomic.Store(body.RPS)
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": "updated", "rps": body.RPS})
+				return
+			}
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		baseHandler.ServeHTTP(w, r)
+	})
+
+	srv := &http.Server{
+		Addr:              ":" + *portFlag,
+		Handler:           rootHandler,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
+
+	log.Printf("[FuzzLoad Go Data Plane] Reverse Proxy listening on :%s (policy=%s, upstreams=%d, workers=%v)",
+		*portFlag, proxy.Algorithm(), len(proxy.Nodes()), useDefaultWorkers)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("proxy server failed: %v", err)
 	}
 }

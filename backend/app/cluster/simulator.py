@@ -128,7 +128,8 @@ class FuzzLoadClusterController:
         self.bam = ExponentialBAMAssociativeMemory(gamma=2.4)
         self.last_art_bam_state: dict[str, Any] = {}
         self.blending_lambda = float(os.getenv("GP_BLENDING_LAMBDA", "0.58"))
-        self.algorithm: str = "fuzzload"
+        env_policy = os.getenv("FUZZLOAD_POLICY", "fuzzload").strip()
+        self.algorithm: str = env_policy if env_policy in VALID_ALGORITHMS else "fuzzload"
         self.traffic_profile: str = "sine_wave"
         self.base_rps: int = 420
         self.current_rps: int = 420
@@ -136,13 +137,9 @@ class FuzzLoadClusterController:
         self.start_time: float = time.time()
         self.go_proxy_url: str = os.getenv("GO_PROXY_URL", "http://127.0.0.1:8080")
         self.go_proxy_connected: bool = False
+        self.telemetry_source: str = "digital_twin"
 
-        self.nodes: list[ServerNodeState] = [
-            ServerNodeState("node-1", "Node-1 (4c Compute)", 9001, 4.0, 16.0, 4, routing_weight=0.38),
-            ServerNodeState("node-2", "Node-2 (2c General)", 9002, 2.0, 8.0, 2, routing_weight=0.24),
-            ServerNodeState("node-3", "Node-3 (2c Memory)", 9003, 2.0, 16.0, 2, routing_weight=0.24),
-            ServerNodeState("node-4", "Node-4 (1c Edge)", 9004, 1.0, 4.0, 1, routing_weight=0.14),
-        ]
+        self.nodes: list[ServerNodeState] = self._build_initial_nodes()
 
         self.replay_buffer: list[list[dict[str, float]]] = []
         self.metrics_history: list[dict[str, Any]] = []
@@ -151,6 +148,120 @@ class FuzzLoadClusterController:
         for _ in range(24):
             self.step_fast_loop(sync_go=False)
         self.last_benchmark = self.run_comparative_benchmark()
+
+    def _build_initial_nodes(self) -> list[ServerNodeState]:
+        """Initialize nodes from FUZZLOAD_UPSTREAMS env var if configured, else default 4-node cluster."""
+        env_upstreams = os.getenv("FUZZLOAD_UPSTREAMS", "").strip()
+        if not env_upstreams:
+            return [
+                ServerNodeState("node-1", "Node-1 (4c Compute)", 9001, 4.0, 16.0, 4, routing_weight=0.38),
+                ServerNodeState("node-2", "Node-2 (2c General)", 9002, 2.0, 8.0, 2, routing_weight=0.24),
+                ServerNodeState("node-3", "Node-3 (2c Memory)", 9003, 2.0, 16.0, 2, routing_weight=0.24),
+                ServerNodeState("node-4", "Node-4 (1c Edge)", 9004, 1.0, 4.0, 1, routing_weight=0.14),
+            ]
+
+        urls = [u.strip() for u in env_upstreams.split(",") if u.strip()]
+        env_weights = [w.strip() for w in os.getenv("FUZZLOAD_WEIGHTS", "").split(",") if w.strip()]
+        parsed_w: list[float] = []
+        for w_str in env_weights:
+            try:
+                parsed_w.append(max(0.01, float(w_str)))
+            except ValueError:
+                pass
+
+        nodes: list[ServerNodeState] = []
+        default_w = round(1.0 / max(1, len(urls)), 4)
+        for idx, raw_url in enumerate(urls):
+            port = 80
+            try:
+                from urllib.parse import urlparse
+
+                p_url = urlparse(raw_url)
+                if p_url.port:
+                    port = p_url.port
+                elif p_url.scheme == "https":
+                    port = 443
+            except Exception:
+                port = 9001 + idx
+            w_init = parsed_w[idx] if idx < len(parsed_w) else default_w
+            nodes.append(
+                ServerNodeState(
+                    node_id=f"node-{idx + 1}",
+                    name=f"Node-{idx + 1} ({raw_url.replace('http://', '').replace('https://', '')})",
+                    port=port,
+                    capacity_cores=2.0,
+                    memory_gb=8.0,
+                    static_weight=2,
+                    routing_weight=w_init,
+                )
+            )
+        return nodes
+
+    def _pull_telemetry_from_go_proxy(self) -> bool:
+        """Pull live per-node socket telemetry from the Go Data Plane Proxy (GET /api/telemetry)."""
+        req = urllib.request.Request(f"{self.go_proxy_url}/api/telemetry", method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=0.15) as resp:
+                if resp.status != 200:
+                    self.go_proxy_connected = False
+                    self.telemetry_source = "digital_twin"
+                    return False
+                payload = json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            self.go_proxy_connected = False
+            self.telemetry_source = "digital_twin"
+            return False
+
+        go_nodes = payload.get("nodes") or []
+        by_id = {str(item.get("node_id")): item for item in go_nodes}
+        has_live_traffic = any(int(item.get("requests_served", 0)) > 0 for item in go_nodes)
+
+        for n in self.nodes:
+            src = by_id.get(n.node_id)
+            if not src:
+                continue
+            if has_live_traffic:
+                n.active_connections = int(src.get("active_connections", n.active_connections))
+                n.requests_served = int(src.get("requests_served", n.requests_served))
+                n.cpu_usage = _clip(float(src.get("cpu_usage", n.cpu_usage)), 0.0, 0.99)
+                n.mem_usage = _clip(float(src.get("mem_usage", n.mem_usage)), 0.0, 0.99)
+                p50 = float(src.get("p50_latency_ms", n.p50_latency_ms))
+                p95 = float(src.get("p95_latency_ms", n.p95_latency_ms))
+                p99 = float(src.get("p99_latency_ms", n.p99_latency_ms))
+                if p50 > 0:
+                    n.p50_latency_ms = p50
+                if p95 > 0:
+                    n.p95_latency_ms = p95
+                if p99 > 0:
+                    n.p99_latency_ms = p99
+                n.error_rate = _clip(float(src.get("error_rate", n.error_rate)), 0.0, 1.0)
+                if src.get("circuit_breaker_open"):
+                    n.error_rate = max(n.error_rate, 0.50)
+
+        self.go_proxy_connected = True
+        self.telemetry_source = "go_proxy_live" if has_live_traffic else "go_proxy_coupled"
+        return has_live_traffic
+
+    def _sync_chaos_to_go_proxy(self, node: ServerNodeState) -> None:
+        """Forward node chaos fault injection directly to the Go Data Plane Proxy (POST /api/chaos)."""
+        payload = json.dumps(
+            {
+                "node_id": node.node_id,
+                "chaos": node.chaos.to_dict(),
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.go_proxy_url}/api/chaos",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=0.15) as resp:
+                if resp.status == 200:
+                    self.go_proxy_connected = True
+        except Exception:
+            pass
 
     def _compute_incoming_rps(self) -> int:
         t = self.tick_count * 0.5
@@ -202,6 +313,7 @@ class FuzzLoadClusterController:
         """Execute one 500ms ANFIS fast control loop tick."""
         self.tick_count += 1
         self.current_rps = self._compute_incoming_rps()
+        live_go_telemetry = self._pull_telemetry_from_go_proxy() if sync_go else False
 
         node_vectors: list[list[float]] = []
         node_envs: list[dict[str, float]] = []
@@ -291,6 +403,13 @@ class FuzzLoadClusterController:
                 n.p95_latency_ms = 0.0
                 n.p99_latency_ms = 0.0
                 n.error_rate = 1.0
+                continue
+
+            if live_go_telemetry:
+                # Preserve real socket latency, connections, CPU/Mem & error metrics pulled from Go proxy
+                cluster_p50_weighted += w * n.p50_latency_ms
+                cluster_p95_weighted += w * n.p95_latency_ms
+                cluster_err_weighted += w * n.error_rate
                 continue
 
             node_rps = self.current_rps * w
@@ -445,6 +564,7 @@ class FuzzLoadClusterController:
         else:
             raise ValueError(f"Unknown fault_type '{fault_type}'")
 
+        self._sync_chaos_to_go_proxy(target)
         self.step_fast_loop(sync_go=False)
         return self.step_fast_loop(sync_go=True)
 
@@ -535,6 +655,7 @@ class FuzzLoadClusterController:
             "current_rps": self.current_rps,
             "blending_lambda": self.blending_lambda,
             "go_proxy_connected": self.go_proxy_connected,
+            "telemetry_source": self.telemetry_source,
             "summary": latest_metric,
             "nodes": [n.to_dict() for n in self.nodes],
             "anfis": self.anfis.get_membership_curves(),

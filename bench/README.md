@@ -2,10 +2,17 @@
 
 Reproducible benchmark comparing **FuzzLoad (Genetic Programming + 5-Layer ANFIS)** against 4 classical and single-loop baselines on an identical heterogeneous 4-node cluster (`4c`, `2c`, `2c`, `1c`) at `480 RPS` with synthetic CPU and I/O contention injected on `Node-2`.
 
-## Run the Benchmark
+## Run the Benchmarks
 
 ```bash
+# 1. Digital Twin comparative benchmark (all 5 policies)
 python bench/run_benchmark.py
+
+# 2. Live HTTP socket benchmark against a running Go Data Plane proxy (:8080)
+python bench/run_benchmark.py --live-go --proxy-url http://127.0.0.1:8080 --requests 400 --concurrency 24
+
+# 3. Go SDK zero-allocation hot-path microbenchmark (0 allocs/op)
+cd proxy-go && go test -v -race ./... && go test -run=^$ -bench=. -benchmem ./pkg/fuzzload
 ```
 
 ## Results

@@ -72,7 +72,7 @@ export default function ProxyPlaygroundPage() {
   const [newCores, setNewCores] = useState(2);
   const [burstRequests, setBurstRequests] = useState(3);
   const [isProbing, setIsProbing] = useState(false);
-  const [configTab, setConfigTab] = useState<"cli" | "json" | "docker" | "python">("cli");
+  const [configTab, setConfigTab] = useState<"go" | "cli" | "json" | "docker" | "python">("go");
   const [copiedConfig, setCopiedConfig] = useState(false);
   const [probeLogs, setProbeLogs] = useState<string[]>([
     "[PROBER INIT] Paste any public HTTPS URL or API endpoint above and click '+ ADD TARGET' to include it in the pool.",
@@ -192,7 +192,14 @@ export default function ProxyPlaygroundPage() {
 
   const dockerSnippet = `services:\n  fuzzload-gateway:\n    image: ghcr.io/tanisheesh/fuzzload:latest\n    ports:\n      - "8080:8080"\n      - "8000:8000"\n    environment:\n      - POLICY=fuzzload\n      - UPSTREAMS=${upstreams.map((u) => u.url).join(",")}`;
 
-  const pythonSnippet = `from app.cli import FuzzLoadRouter\n\nrouter = FuzzLoadRouter(\n    upstreams=[\n${upstreams
+  const goSnippet = `package main\n\nimport (\n\t"net/http"\n\t"github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload"\n)\n\nfunc main() {\n\tproxy, _ := fuzzload.NewProxy(fuzzload.Config{\n\t\tAlgorithm: fuzzload.AlgoFuzzLoad,\n\t\tUpstreams: []fuzzload.UpstreamSpec{\n${upstreams
+    .map(
+      (u) =>
+        `\t\t\t{ID: "${u.id}", URL: "${u.url}", CapacityCores: ${u.cores}, InitialWeight: ${(u.assignedWeightPct / 100).toFixed(2)}},`
+    )
+    .join("\n")}\n\t\t},\n\t})\n\thttp.ListenAndServe(":8080", proxy.ControlMux())\n}`;
+
+  const pythonSnippet = `from fuzzload import FuzzLoadRouter\n\nrouter = FuzzLoadRouter(\n    upstreams=[\n${upstreams
     .map(
       (u) =>
         `        {"id": "${u.id}", "url": "${u.url}", "cores": ${u.cores}},`
@@ -200,7 +207,9 @@ export default function ProxyPlaygroundPage() {
     .join("\n")}\n    ]\n)\n\ntarget_url = router.select_upstream()`;
 
   const activeConfigText =
-    configTab === "cli"
+    configTab === "go"
+      ? goSnippet
+      : configTab === "cli"
       ? cliCommand
       : configTab === "json"
       ? jsonConfig
@@ -399,9 +408,10 @@ export default function ProxyPlaygroundPage() {
                   {copiedConfig ? "[COPIED]" : "[COPY]"}
                 </button>
               </div>
-              <div className="grid grid-cols-4 border-b border-[#222220] font-mono text-[10px]">
+              <div className="grid grid-cols-5 border-b border-[#222220] font-mono text-[10px]">
                 {(
                   [
+                    ["go", "GO SDK"],
                     ["cli", "CLI"],
                     ["json", "JSON"],
                     ["docker", "DOCKER"],

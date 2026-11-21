@@ -6,6 +6,22 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
 const QUICKSTART_TABS = {
+  gosdk: {
+    label: "GO SDK",
+    code: `import (
+    "net/http"
+    "github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload"
+)
+
+proxy, _ := fuzzload.NewProxy(fuzzload.Config{
+    Algorithm: fuzzload.AlgoFuzzLoad,
+    Upstreams: []fuzzload.UpstreamSpec{
+        {ID: "worker-a", URL: "http://10.0.1.11:8080", CapacityCores: 4},
+        {ID: "worker-b", URL: "http://10.0.1.12:8080", CapacityCores: 2},
+    },
+})
+http.ListenAndServe(":8080", proxy.ControlMux()) // 0 allocs/op lookup`,
+  },
   cli: {
     label: "CLI GATEWAY",
     code: `# Start FuzzLoad Reverse Proxy + ANFIS/GP Control Plane in front of any servers
@@ -18,7 +34,7 @@ fuzzload start \\
   },
   sdk: {
     label: "PYTHON SDK",
-    code: `from app.cli import FuzzLoadRouter
+    code: `from fuzzload import FuzzLoadRouter
 
 router = FuzzLoadRouter(
     upstreams=[
@@ -51,7 +67,7 @@ const BENCHMARK_ROWS = [
 ];
 
 export default function LandingPage() {
-  const [activeTab, setActiveTab] = useState<"cli" | "sdk" | "docker">("cli");
+  const [activeTab, setActiveTab] = useState<"gosdk" | "cli" | "sdk" | "docker">("gosdk");
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -260,8 +276,8 @@ export default function LandingPage() {
                 DEPLOY IN FRONT OF ANY CLUSTER
               </h2>
 
-              <div className="grid grid-cols-3 border border-[#222220] mb-4">
-                {(Object.keys(QUICKSTART_TABS) as Array<"cli" | "sdk" | "docker">).map((k) => (
+              <div className="grid grid-cols-2 sm:grid-cols-4 border border-[#222220] mb-4">
+                {(Object.keys(QUICKSTART_TABS) as Array<"gosdk" | "cli" | "sdk" | "docker">).map((k) => (
                   <button
                     key={k}
                     onClick={() => setActiveTab(k)}

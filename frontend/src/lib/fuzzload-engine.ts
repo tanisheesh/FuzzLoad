@@ -137,6 +137,7 @@ export interface FuzzLoadClusterState {
   current_rps: number;
   blending_lambda: number;
   go_proxy_connected: boolean;
+  telemetry_source?: string;
   summary: MetricPoint;
   nodes: WorkerNodeTelemetry[];
   anfis: ANFISState;

@@ -1,13 +1,14 @@
 # Multi-Stage Unified Dockerfile (Go Data Plane + Python AI Control Plane)
 # Ideal for Render Free Web Service or single-container AWS deployment.
 
-FROM golang:1.27-alpine AS go-builder
+FROM golang:1.23-alpine AS go-builder
 WORKDIR /go-src
 COPY proxy-go/go.mod ./
+COPY proxy-go/pkg/ ./pkg/
 COPY proxy-go/cmd/ ./cmd/
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /fuzzload-proxy ./cmd/fuzzload-proxy
 
-FROM python:3.15-slim
+FROM python:3.12-slim
 WORKDIR /app
 
 COPY --from=go-builder /fuzzload-proxy /usr/local/bin/fuzzload-proxy
@@ -15,8 +16,9 @@ COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/app ./app
+COPY backend/fuzzload ./fuzzload
 
-RUN printf '#!/bin/sh\n/usr/local/bin/fuzzload-proxy &\nexec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}\n' > /start.sh \
+RUN printf '#!/bin/sh\n/usr/local/bin/fuzzload-proxy --port ${GO_PROXY_PORT:-8080} --loadgen-rps ${GO_LOADGEN_RPS:-120} &\nexec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}\n' > /start.sh \
     && chmod +x /start.sh
 
 EXPOSE 8000 8080

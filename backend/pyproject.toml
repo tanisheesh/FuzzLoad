@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fuzzload-backend"
+name = "fuzzload"
 version = "1.0.0"
-description = "FuzzLoad Soft-Computing AI Control Plane (5-Layer ANFIS + Genetic Programming)"
+description = "FuzzLoad Adaptive Load Balancer SDK & Soft-Computing AI Control Plane (5-Layer ANFIS + Genetic Programming)"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
@@ -23,7 +23,7 @@ fuzzload = "app.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["app*"]
+include = ["app*", "fuzzload*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
