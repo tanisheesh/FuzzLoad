@@ -1,3 +1,7 @@
+import dns from "node:dns/promises";
+import http from "node:http";
+import https from "node:https";
+import net from "node:net";
 import { NextRequest, NextResponse } from "next/server";
 
 interface ProbeTargetInput {
@@ -17,10 +21,10 @@ function computePercentile(sorted: number[], p: number): number {
   return sorted[base] + rest * (next - sorted[base]);
 }
 
-function isPrivateOrLocalIPv4(ip: string): boolean {
+function isDisallowedIPv4(ip: string): boolean {
   const parts = ip.split(".").map(Number);
   if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) {
-    return false;
+    return true;
   }
   const [a, b] = parts;
   return (
@@ -30,36 +34,170 @@ function isPrivateOrLocalIPv4(ip: string): boolean {
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) ||
-    (a === 100 && b >= 64 && b <= 127)
+    (a === 100 && b >= 64 && b <= 127) ||
+    a >= 224
   );
 }
 
-function isSafeHttpUrl(rawUrl: string): boolean {
-  try {
-    const parsed = new URL(rawUrl);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
-    if (parsed.username || parsed.password) return false;
-    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-    if (
-      host === "localhost" ||
-      host.endsWith(".localhost") ||
-      host.endsWith(".local") ||
-      host.endsWith(".internal") ||
-      host === "::1" ||
-      host === "::" ||
-      host.startsWith("fe80:") ||
-      host.startsWith("fc") ||
-      host.startsWith("fd") ||
-      host === "169.254.169.254" ||
-      host === "metadata.google.internal" ||
-      isPrivateOrLocalIPv4(host)
-    ) {
-      return false;
+function extractMappedIPv4FromIPv6(rawIp: string): string | null {
+  const ip = rawIp.toLowerCase();
+  if (!ip.startsWith("::ffff:")) return null;
+  const tail = ip.slice("::ffff:".length);
+  if (net.isIPv4(tail)) return tail;
+  // Hex form: ::ffff:7f00:1 or ::ffff:7f00:0001
+  const hexParts = tail.split(":");
+  if (hexParts.length === 2) {
+    const hi = parseInt(hexParts[0], 16);
+    const lo = parseInt(hexParts[1], 16);
+    if (!Number.isNaN(hi) && !Number.isNaN(lo) && hi >= 0 && hi <= 0xffff && lo >= 0 && lo <= 0xffff) {
+      return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
     }
-    return true;
-  } catch {
+  }
+  return null;
+}
+
+function isDisallowedIP(rawIp: string): boolean {
+  const ip = rawIp.toLowerCase().replace(/^\[|\]$/g, "");
+  if (net.isIPv4(ip)) {
+    return isDisallowedIPv4(ip);
+  }
+  if (net.isIPv6(ip)) {
+    const mapped = extractMappedIPv4FromIPv6(ip);
+    if (mapped) return isDisallowedIPv4(mapped);
+    if (
+      ip === "::1" ||
+      ip === "::" ||
+      ip.startsWith("fe80:") ||
+      ip.startsWith("fc") ||
+      ip.startsWith("fd") ||
+      ip.startsWith("ff")
+    ) {
+      return true;
+    }
     return false;
   }
+  return true;
+}
+
+interface ResolvedTarget {
+  parsed: URL;
+  pinnedIp: string;
+  family: 4 | 6;
+}
+
+async function resolveAndValidateTarget(rawUrl: string): Promise<ResolvedTarget | null> {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+  if (parsed.username || parsed.password) return null;
+
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (
+    !host ||
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal") ||
+    host === "metadata.google.internal"
+  ) {
+    return null;
+  }
+
+  // Direct IP literal check (covers IPv4, IPv6, and IPv4-mapped IPv6 like ::ffff:7f00:1)
+  if (net.isIP(host) !== 0) {
+    if (isDisallowedIP(host)) return null;
+    return { parsed, pinnedIp: host, family: net.isIPv6(host) ? 6 : 4 };
+  }
+
+  // Resolve DNS records and verify every address is public before pinning one
+  try {
+    const records = await dns.lookup(host, { all: true });
+    if (!records.length) return null;
+    for (const rec of records) {
+      if (isDisallowedIP(rec.address)) {
+        return null;
+      }
+    }
+    const chosen = records[0];
+    return {
+      parsed,
+      pinnedIp: chosen.address,
+      family: chosen.family === 6 ? 6 : 4,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function pinnedHttpGet(
+  target: ResolvedTarget,
+  timeoutMs = 6000
+): Promise<{ statusCode: number; bytesReceived: number; serverHeader: string }> {
+  return new Promise((resolve, reject) => {
+    const { parsed, pinnedIp, family } = target;
+    const isHttps = parsed.protocol === "https:";
+    const port = parsed.port ? Number(parsed.port) : isHttps ? 443 : 80;
+    const path = `${parsed.pathname || "/"}${parsed.search || ""}`;
+    const hostHeader = parsed.port ? `${parsed.hostname}:${port}` : parsed.hostname;
+
+    const lookup: http.RequestOptions["lookup"] = (_h, _opts, cb) => {
+      cb(null, pinnedIp, family);
+    };
+
+    const reqOptions: https.RequestOptions = {
+      hostname: parsed.hostname,
+      port,
+      path,
+      method: "GET",
+      timeout: timeoutMs,
+      lookup,
+      servername: isHttps ? parsed.hostname : undefined,
+      headers: {
+        Host: hostHeader,
+        "User-Agent": "FuzzLoad-Adaptive-Load-Balancer/1.0 (+https://fuzzload.tanisheesh.in)",
+        Connection: "close",
+      },
+    };
+
+    const transport = isHttps ? https : http;
+    const req = transport.request(reqOptions, (res) => {
+      const statusCode = res.statusCode ?? 0;
+      if (statusCode >= 300 && statusCode < 400) {
+        res.destroy();
+        reject(new Error(`Redirects are disabled during probing (HTTP ${statusCode})`));
+        return;
+      }
+      let bytesReceived = 0;
+      res.on("data", (chunk: Buffer) => {
+        bytesReceived += chunk.length;
+        if (bytesReceived > 65536) {
+          res.destroy();
+        }
+      });
+      res.on("end", () => {
+        const srvHdr =
+          (typeof res.headers.server === "string" && res.headers.server) ||
+          (res.headers["x-vercel-id"] ? "Vercel Edge" : "Origin");
+        resolve({ statusCode, bytesReceived, serverHeader: srvHdr });
+      });
+      res.on("close", () => {
+        const srvHdr =
+          (typeof res.headers.server === "string" && res.headers.server) ||
+          (res.headers["x-vercel-id"] ? "Vercel Edge" : "Origin");
+        resolve({ statusCode, bytesReceived, serverHeader: srvHdr });
+      });
+    });
+
+    req.on("timeout", () => {
+      req.destroy(new Error("Probe timeout"));
+    });
+    req.on("error", reject);
+    req.end();
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -74,7 +212,8 @@ export async function POST(req: NextRequest) {
 
     const probedResults = await Promise.all(
       targets.map(async (target) => {
-        if (!isSafeHttpUrl(target.url)) {
+        const resolved = await resolveAndValidateTarget(target.url);
+        if (!resolved) {
           return {
             ...target,
             statusCode: 400,
@@ -101,27 +240,13 @@ export async function POST(req: NextRequest) {
         for (let i = 0; i < burstCount; i++) {
           const start = performance.now();
           try {
-            const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), 6000);
-            const resp = await fetch(target.url, {
-              method: "GET",
-              redirect: "error",
-              signal: ctrl.signal,
-              headers: {
-                "User-Agent": "FuzzLoad-Adaptive-Load-Balancer/1.0 (+https://fuzzload.tanisheesh.in)",
-              },
-              cache: "no-store",
-            });
-            clearTimeout(timer);
-            const text = await resp.text();
+            const resp = await pinnedHttpGet(resolved, 6000);
             const elapsed = performance.now() - start;
             latencies.push(elapsed);
-            statusCode = resp.status;
-            bytesReceived = text.length;
-            serverHeader =
-              resp.headers.get("server") ||
-              (resp.headers.get("x-vercel-id") ? "Vercel Edge" : "Origin");
-            if (!resp.ok) errors += 1;
+            statusCode = resp.statusCode;
+            bytesReceived = resp.bytesReceived;
+            serverHeader = resp.serverHeader;
+            if (resp.statusCode < 200 || resp.statusCode >= 400) errors += 1;
           } catch {
             const elapsed = performance.now() - start;
             latencies.push(Math.max(elapsed, 850));
