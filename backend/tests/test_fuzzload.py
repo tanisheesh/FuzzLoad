@@ -247,8 +247,46 @@ def test_ssrf_probe_url_validation() -> None:
     assert _is_safe_probe_url("http://10.0.0.5/internal") is False
     assert _is_safe_probe_url("http://192.168.1.10/admin") is False
     assert _is_safe_probe_url("http://[::1]:8080/") is False
+    assert _is_safe_probe_url("http://[::ffff:7f00:1]:8080/") is False
     assert _is_safe_probe_url("file:///etc/passwd") is False
     assert _is_safe_probe_url("https://user:pass@example.com/") is False
+
+
+def test_non_four_node_cluster_weights_and_display_sanitization() -> None:
+    prev_up = os.environ.get("FUZZLOAD_UPSTREAMS")
+    prev_wt = os.environ.get("FUZZLOAD_WEIGHTS")
+    try:
+        # 2-node cluster with embedded credentials in URL and custom weights
+        os.environ["FUZZLOAD_UPSTREAMS"] = "https://svc:topsecret@api1.example.com:8443/v1?k=1,https://api2.example.com/v1"
+        os.environ["FUZZLOAD_WEIGHTS"] = "4,1"
+        ctrl2 = FuzzLoadClusterController()
+        assert len(ctrl2.nodes) == 2
+        assert "topsecret" not in ctrl2.nodes[0].name
+        assert "svc" not in ctrl2.nodes[0].name
+        assert "api1.example.com:8443" in ctrl2.nodes[0].name
+        assert ctrl2.nodes[0].static_weight == 4
+        assert ctrl2.nodes[1].static_weight == 1
+        ctrl2.set_algorithm("weighted_round_robin")
+        state2 = ctrl2.step_fast_loop(sync_go=False)
+        assert state2["nodes"][0]["routing_weight"] > state2["nodes"][1]["routing_weight"]
+
+        # 5-node cluster must not crash BAM or drop the 5th node
+        os.environ["FUZZLOAD_UPSTREAMS"] = ",".join(f"http://10.0.0.{i}:8080" for i in range(1, 6))
+        os.environ["FUZZLOAD_WEIGHTS"] = "5,4,3,2,1"
+        ctrl5 = FuzzLoadClusterController()
+        assert len(ctrl5.nodes) == 5
+        state5 = ctrl5.step_fast_loop(sync_go=False)
+        assert len(state5["nodes"]) == 5
+        assert state5["nodes"][4]["routing_weight"] > 0.0
+    finally:
+        if prev_up is None:
+            os.environ.pop("FUZZLOAD_UPSTREAMS", None)
+        else:
+            os.environ["FUZZLOAD_UPSTREAMS"] = prev_up
+        if prev_wt is None:
+            os.environ.pop("FUZZLOAD_WEIGHTS", None)
+        else:
+            os.environ["FUZZLOAD_WEIGHTS"] = prev_wt
 
 
 class FuzzLoadTestSuite(unittest.TestCase):

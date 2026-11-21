@@ -212,7 +212,8 @@ def _cmd_start(args: argparse.Namespace) -> None:
 
     print(f"[FuzzLoad] Starting AI Control Plane on 0.0.0.0:{args.port} (policy={policy})")
     if upstreams_str:
-        print(f"[FuzzLoad] Upstreams: {upstreams_str}")
+        print(f"[FuzzLoad] Control-plane node model initialized with {len([u for u in upstreams_str.split(',') if u.strip()])} nodes.")
+        print("[FuzzLoad] Note: Pass the same --upstreams to `fuzzload-proxy` to configure Go data-plane forwarding targets.")
     print(f"[FuzzLoad] Go Data Plane URL: {os.environ.get('GO_PROXY_URL', 'http://127.0.0.1:8080')}")
     uvicorn.run("app.main:app", host="0.0.0.0", port=args.port, reload=False)
 
@@ -305,8 +306,13 @@ def main() -> None:
     )
     sub = parser.add_subparsers(dest="command")
 
-    start_p = sub.add_parser("start", help="Start the FuzzLoad AI Control Plane & Gateway")
-    start_p.add_argument("--upstreams", type=str, default="", help="Comma-separated upstream URLs")
+    start_p = sub.add_parser("start", help="Start the FuzzLoad Python AI Control Plane")
+    start_p.add_argument(
+        "--upstreams",
+        type=str,
+        default="",
+        help="Comma-separated upstream URLs for the control-plane node model (pass matching --upstreams to fuzzload-proxy for Go data-plane routing)",
+    )
     start_p.add_argument("--weights", type=str, default="", help="Comma-separated initial weights")
     start_p.add_argument("--policy", type=str, default="fuzzload", help="Routing algorithm")
     start_p.add_argument("--config", type=str, default="", help="Path to fuzzload.config.json")

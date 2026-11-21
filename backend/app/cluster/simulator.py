@@ -171,8 +171,10 @@ class FuzzLoadClusterController:
 
         nodes: list[ServerNodeState] = []
         default_w = round(1.0 / max(1, len(urls)), 4)
+        min_parsed_w = min(parsed_w) if parsed_w else 1.0
         for idx, raw_url in enumerate(urls):
             port = 80
+            display_host = f"upstream-{idx + 1}"
             try:
                 from urllib.parse import urlparse
 
@@ -181,20 +183,28 @@ class FuzzLoadClusterController:
                     port = p_url.port
                 elif p_url.scheme == "https":
                     port = 443
+                # Build display label strictly from hostname + port (never leak credentials or query strings)
+                if p_url.hostname:
+                    display_host = f"{p_url.hostname}:{port}" if p_url.port else p_url.hostname
             except Exception:
                 port = 9001 + idx
-            w_init = parsed_w[idx] if idx < len(parsed_w) else default_w
+
+            raw_weight = parsed_w[idx] if idx < len(parsed_w) else default_w
+            static_w = max(1, int(round(raw_weight / max(min_parsed_w, 1e-6)))) if parsed_w else 2
             nodes.append(
                 ServerNodeState(
                     node_id=f"node-{idx + 1}",
-                    name=f"Node-{idx + 1} ({raw_url.replace('http://', '').replace('https://', '')})",
+                    name=f"Node-{idx + 1} ({display_host})",
                     port=port,
                     capacity_cores=2.0,
                     memory_gb=8.0,
-                    static_weight=2,
-                    routing_weight=w_init,
+                    static_weight=static_w,
+                    routing_weight=raw_weight,
                 )
             )
+        w_sum = sum(n.routing_weight for n in nodes) or 1.0
+        for n in nodes:
+            n.routing_weight = round(n.routing_weight / w_sum, 4)
         return nodes
 
     def _pull_telemetry_from_go_proxy(self) -> bool:
@@ -242,6 +252,13 @@ class FuzzLoadClusterController:
         self.telemetry_source = "go_proxy_live" if has_live_traffic else "go_proxy_coupled"
         return has_live_traffic
 
+    def _go_admin_headers(self) -> dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        token = os.getenv("FUZZLOAD_ADMIN_TOKEN", "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return headers
+
     def _sync_chaos_to_go_proxy(self, node: ServerNodeState) -> None:
         """Forward node chaos fault injection directly to the Go Data Plane Proxy (POST /api/chaos)."""
         payload = json.dumps(
@@ -253,7 +270,7 @@ class FuzzLoadClusterController:
         req = urllib.request.Request(
             f"{self.go_proxy_url}/api/chaos",
             data=payload,
-            headers={"Content-Type": "application/json"},
+            headers=self._go_admin_headers(),
             method="POST",
         )
         try:
@@ -360,13 +377,18 @@ class FuzzLoadClusterController:
             min(1.0, 0.5 * n.cpu_usage + 0.5 * (n.p95_latency_ms / 220.0))
             for n in self.nodes
         ]
-        bam_prior_weights, bam_resonance = self.bam.forward_heterocorrelator_recall(stress_vec)
+        use_bam = len(self.nodes) == 4
+        if use_bam:
+            bam_prior_weights, bam_resonance = self.bam.forward_heterocorrelator_recall(stress_vec)
+        else:
+            bam_prior_weights, bam_resonance = [], 0.0
         self.last_art_bam_state = {
             "art1": art1_res,
             "art2": art2_res,
             "bam_prior_weights": bam_prior_weights,
             "bam_resonance": bam_resonance,
             "bam_stored_pairs": len(self.bam.memory_pairs),
+            "bam_active": use_bam,
         }
 
         for n, a_sc, g_sc in zip(self.nodes, anfis_scores, gp_scores):
@@ -374,7 +396,7 @@ class FuzzLoadClusterController:
             n.gp_score = g_sc
 
         target_weights = self._compute_policy_weights(self.algorithm, anfis_scores, gp_scores)
-        if self.algorithm == "fuzzload":
+        if self.algorithm == "fuzzload" and use_bam and len(bam_prior_weights) == len(target_weights):
             # Blend 85% ANFIS+GP weights with 15% Exponential BAM recalled prior
             target_weights = [
                 0.85 * tw + 0.15 * bw
@@ -511,8 +533,9 @@ class FuzzLoadClusterController:
                 self.gp.best_ga_chromosome.rule_bits,
                 self.gp.best_ga_chromosome.bpn_weight_delta,
             )
-            # Reinforce high-performing stress->weight mapping in Exponential BAM
-            self.bam.encode_pattern_pair(stress_vec, final_weights, multiplicity=1.2)
+            # Reinforce high-performing stress->weight mapping in 4-node Exponential BAM
+            if use_bam:
+                self.bam.encode_pattern_pair(stress_vec, final_weights, multiplicity=1.2)
 
         if sync_go:
             self._sync_weights_to_go_proxy()
@@ -530,7 +553,7 @@ class FuzzLoadClusterController:
         req = urllib.request.Request(
             f"{self.go_proxy_url}/api/weights",
             data=payload,
-            headers={"Content-Type": "application/json"},
+            headers=self._go_admin_headers(),
             method="POST",
         )
         try:
