@@ -12,16 +12,20 @@
   <a href="https://fuzzload.tanisheesh.in">
     <img src="https://img.shields.io/badge/live_demo-FF5500-FF5500?style=flat-square" alt="Live Demo">
   </a>
+  <a href="https://github.com/tanisheesh/FuzzLoad/actions/workflows/ci.yml">
+    <img src="https://github.com/tanisheesh/FuzzLoad/actions/workflows/ci.yml/badge.svg" alt="CI">
+  </a>
+  <a href="https://github.com/tanisheesh/FuzzLoad/actions/workflows/codeql.yml">
+    <img src="https://github.com/tanisheesh/FuzzLoad/actions/workflows/codeql.yml/badge.svg" alt="CodeQL">
+  </a>
   <a href="https://pkg.go.dev/github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload">
     <img src="https://img.shields.io/badge/Go_SDK-pkg.go.dev-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go Reference">
   </a>
   <img src="https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go">
   <img src="https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI">
-  <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch">
   <img src="https://img.shields.io/badge/Next.js-black?style=flat-square&logo=next.js" alt="Next.js">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
-  <img src="https://img.shields.io/badge/AWS-232F3E?style=flat-square&logo=amazon-aws&logoColor=white" alt="AWS">
   <img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-FF5500?style=flat-square" alt="License"></a>
 </p>
@@ -81,8 +85,11 @@ Move the data-plane packet forwarding into an eBPF/XDP kernel-bypass layer readi
 | [PRD](docs/PRD.md) | Product requirements — problem statement, goals, user stories, non-goals |
 | [Architecture](docs/ARCHITECTURE.md) | System design, Go Data Plane + Python Control Plane data flow, ANFIS & GP pipeline |
 | [Decisions](docs/DECISIONS.md) | Every major architectural and algorithmic decision and why |
+| [Usage & SDK Reference](docs/USAGE.md) | Go SDK (`pkg/fuzzload`), Python SDK (`fuzzload`), CLI commands, and HTTP/WS API reference |
 | [Setup](docs/SETUP.md) | Local development setup and cluster execution |
 | [Deploy](docs/DEPLOY.md) | Production deployment on Vercel, AWS EC2, and Render |
+| [Benchmarks](bench/README.md) | Verified Go hot-path microbenchmarks and 5-policy comparative latency results |
+| [Agent Guidelines](AGENTS.md) | Runtime coding, security, UI craft, and verification contract |
 | [Contributing](CONTRIBUTING.md) | How to propose changes |
 | [Changelog](CHANGELOG.md) | What changed in each release |
 | [Security](SECURITY.md) | How to report a vulnerability |
