@@ -1,110 +1,125 @@
 # Deploying FuzzLoad
 
-> **Live:** [https://fuzzload.tanisheesh.in](https://fuzzload.tanisheesh.in) · **Host:** Vercel (Frontend) + AWS EC2 / Render (Backend Cluster) · **Auto-deploy:** on push to `main`
+> **Live:** [https://fuzzload.tanisheesh.in](https://fuzzload.tanisheesh.in) · **Host:** Vercel (Frontend) + Render / AWS EC2 Docker (Backend) · **Auto-deploy:** on push to `main`
 
 For local development, see [SETUP.md](SETUP.md).
 
 ---
 
-## 1. Architecture in production
+## 1. Production Topology & Resource Limits
 
-| Piece | Runs on | Notes |
-|---|---|---|
-| **Frontend Dashboard (`frontend/`)** | **Vercel (Free Tier)** | Next.js 16 App Router, served on `https://fuzzload.tanisheesh.in` |
-| **Go Proxy + Python AI Control Plane** | **AWS EC2 (`t3.micro` Free Tier / `t4g.small`)** *or* **Render (Free Docker Service)** | Runs Go Reverse Proxy (`:8080`), 4 Heterogeneous Workers (`:9001-9004`), and FastAPI ANFIS+GP Control Plane (`:8000`) |
-| **DNS** | **GoDaddy** | `fuzzload.tanisheesh.in` → CNAME to Vercel |
-
----
-
-## 2. Environment variables
-
-Set these in the host dashboard (never commit them). Names and defaults are in [`.env.example`](../.env.example).
-
-| Variable | Required | Where it's set |
-|---|---|---|
-| `NEXT_PUBLIC_API_URL` | ✅ | Vercel → Project → Settings → Environment Variables (points to AWS EC2 / Render backend URL) |
-| `PORT` | ❌ | Render / AWS Docker container port (default `8000`) |
-| `GO_PROXY_URL` | ❌ | Internal Go proxy endpoint (default `http://127.0.0.1:8080`) |
-| `CORS_ORIGINS` | ❌ | Allowed frontend origins (`https://fuzzload.tanisheesh.in,http://localhost:3000`) |
-
-> After changing an env var, **redeploy**. Running deployments don't pick up new values.
+| Component | Host / Service | Region & Runtime | Configured Limits / Quotas |
+|---|---|---|---|
+| **Frontend Dashboard (`frontend/`)** | Vercel (Free) | `bom1` (India) · Node `22.x` · Fluid Compute | `30s` timeout · sourcemaps protected · docs-only builds ignored |
+| **Go Proxy + Python Control Plane** | Render (Free Docker) *or* AWS EC2 (`t3.micro`) | Multi-stage `golang:1.23-alpine` + `python:3.12-slim` | `512 MB` RAM on Render (sleeps after 15m idle; UI Digital Twin hides cold start) |
+| **Go SDK Package** | Go Module Proxy (`pkg.go.dev`) | Public tag `proxy-go/v1.0.0` | Immutable Go checksum DB (`sum.golang.org`) |
+| **DNS & TLS** | GoDaddy → Vercel | `fuzzload.tanisheesh.in` | CNAME + automatic Vercel TLS certificate |
 
 ---
 
-## 3. First-time deploy
+## 2. Production Environment Variables
 
-### Step 1: Backend Cluster — Option A: AWS EC2 (Free Tier `t3.micro` / `t2.micro` or Minimal-Cost Spot `t4g.small`)
+Configure variables in the host dashboard (encrypted at rest; never commit). Full list in [`.env.example`](../.env.example).
 
-1. Launch an Ubuntu 24.04 LTS EC2 instance (`t3.micro` for $0/month on AWS Free Tier, or `t4g.small` for ~$3/month).
-2. Allow inbound ports `80`, `443`, `8000` (AI Control Plane API), and `8080` (Go Reverse Proxy) in the AWS Security Group.
-3. SSH into the instance and run:
-   ```bash
-   sudo apt update && sudo apt install -y docker.io docker-compose-v2 git
-   git clone https://github.com/tanisheesh/FuzzLoad.git
-   cd FuzzLoad
-   sudo docker compose up -d --build
-   ```
-4. Verify with `curl http://<EC2_PUBLIC_IP>:8000/api/health`.
+| Variable | Required | Host Location | Sensitivity |
+|---|---|---|---|
+| `NEXT_PUBLIC_API_URL` | ❌ (falls back to Digital Twin) | Vercel → Project → Environment Variables | Public origin URL |
+| `PORT` | ❌ (default `8000`) | Render / Docker container | Low |
+| `CORS_ORIGINS` | ❌ | Render / Docker (`https://fuzzload.tanisheesh.in`) | Medium (restricts cross-origin control API) |
+| `GO_PROXY_URL` | ❌ (default `http://127.0.0.1:8080`) | Render / Docker | Internal loopback |
+| `GO_LOADGEN_RPS` | ❌ (default `120`) | Multi-stage Docker entrypoint | Controls live Go socket traffic rate |
 
-### Step 1: Backend Cluster — Option B: Render (100% Free Multi-Stage Docker Web Service)
+> Changing an env var does **not** update running deployments — trigger a redeploy after editing env vars.
 
-1. [dashboard.render.com](https://dashboard.render.com) → **New → Web Service** → connect `tanisheesh/FuzzLoad`.
-2. Runtime: **Docker** · Dockerfile path: `./Dockerfile` (compiles the Go proxy + worker binary and runs it alongside the Python FastAPI ANFIS+GP Control Plane inside one container).
-3. Plan: **Free** → Deploy. Copy the `https://fuzzload-api.onrender.com` URL.
+---
 
-### Step 2: Frontend Dashboard — Vercel (100% Free)
+## 3. First-Time Deploy
+
+### Frontend (Vercel)
 
 1. [vercel.com/new](https://vercel.com/new) → import `tanisheesh/FuzzLoad`.
 2. Framework preset: **Next.js** · Root directory: `frontend`.
-3. Set `NEXT_PUBLIC_API_URL` to your AWS EC2 or Render backend URL.
-4. Deploy. Every push to `main` automatically deploys to production.
+3. Apply production & security settings via `setup-toolkit`:
+   ```powershell
+   ..\setup-toolkit\scripts\setup-vercel-project.ps1 -Project "fuzzload" -RepoPath . -RootDirectory "frontend" -Region "bom1" -IgnoreDocsOnlyBuilds
+   ```
 
----
+### Backend Cluster — Render (Free Multi-Stage Docker) or AWS EC2
 
-## 4. Custom domain
+- **Render (`render.yaml`):** Connect `tanisheesh/FuzzLoad` → Docker runtime → root `./Dockerfile` → health check `/api/health`.
+- **AWS EC2 / Self-Host Docker Compose:**
+  ```bash
+  git clone https://github.com/tanisheesh/FuzzLoad.git && cd FuzzLoad
+  docker compose up -d --build
+  ```
 
-`fuzzload.tanisheesh.in` is wired with the setup toolkit:
+### Go SDK Release (`pkg.go.dev`)
 
-```powershell
-.\scripts\setup-subdomain.ps1 -Subdomain "fuzzload" -Platform Vercel -VercelProject "fuzzload"
+```bash
+git tag -a proxy-go/v1.0.0 -m "FuzzLoad Go SDK v1.0.0"
+git push origin proxy-go/v1.0.0
 ```
 
-Manual fallback: add `fuzzload.tanisheesh.in` in the Vercel project domains tab, then create a GoDaddy CNAME `fuzzload` → `cname.vercel-dns.com`. HTTPS certificates are issued automatically once DNS resolves (2–10 min).
+---
+
+## 4. Custom Domain & Security Headers
+
+`fuzzload.tanisheesh.in` is wired via:
+
+```powershell
+..\setup-toolkit\scripts\setup-subdomain.ps1 -Subdomain "fuzzload" -Platform Vercel -VercelProject "fuzzload"
+```
+
+- **Security Headers (`frontend/vercel.json`):** `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=()`, and `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`.
 
 ---
 
-## 5. Verify a deploy
+## 5. Post-Deploy Smoke Verification
 
-- [ ] `https://fuzzload.tanisheesh.in` loads with live cluster topology and telemetry charts
-- [ ] `GET /api/health` on the backend returns `{"status": "ok"}` with Go proxy + ANFIS + GP status
-- [ ] Switching algorithms (`Round Robin` → `FuzzLoad GP+ANFIS`) immediately updates routing weights
-- [ ] Clicking **Inject Chaos** on a node triggers ANFIS weight adaptation within 1.5 seconds
+```bash
+# 1. Verify production site returns HTTP 200 and active security headers
+curl -sI https://fuzzload.tanisheesh.in | grep -iE "HTTP/|x-frame-options|x-content-type-options|strict-transport-security|referrer-policy|permissions-policy"
+
+# 2. Verify SSRF guard blocks loopback probe targets on /api/probe
+curl -s -X POST https://fuzzload.tanisheesh.in/api/probe \
+  -H "Content-Type: application/json" \
+  -d '{"requestsPerTarget":1,"targets":[{"id":"t1","name":"local","url":"http://127.0.0.1:8000","cores":2}]}'
+
+# 3. Verify Go SDK package is indexed on pkg.go.dev
+curl -fsSI https://pkg.go.dev/github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload@v1.0.0
+```
+
+- [ ] `https://fuzzload.tanisheesh.in`, `/dashboard`, `/playground`, and `/how-it-works` load cleanly on mobile (`375px`) and desktop (`1280px`) with zero console errors.
+- [ ] Injecting a fault on `/dashboard` drains node share within `1.5s`.
 
 ---
 
-## 6. Rollback
+## 6. Rollback Procedure
 
-| Host | How |
+| Layer | Rollback Action |
 |---|---|
-| Vercel | Dashboard → Deployments → pick the last good one → **Promote to Production** |
-| Render | Service → Events → last good deploy → **Rollback** |
-| AWS EC2 | `git checkout <last-good-commit> && sudo docker compose up -d --build` |
+| **Vercel** | Dashboard → Deployments → pick last known good deploy → **Promote to Production** |
+| **Render** | Service → Events → last good deploy → **Rollback** |
+| **AWS EC2** | `git checkout <last-good-sha> && docker compose up -d --build` |
 
-After rolling back, note it in a commit or PR so the next push doesn't silently re-ship the broken version.
-
----
-
-## 7. Monitoring & logs
-
-- **Logs:** Vercel → Project → Logs / Render → Service → Logs / AWS EC2 → `sudo docker compose logs -f`
-- **Health Endpoint:** `/api/health` exposes uptime, active routing policy, ANFIS epoch, and GP generation count
-- **Dependencies:** Dependabot opens weekly update PRs and a maintenance report is emailed every Monday (see `.github/workflows/`)
+Record any manual rollback (target SHA + reason) in a commit or PR so the next push to `main` does not silently re-ship the broken build.
 
 ---
 
-## Known production limitations
+## 7. Incident Runbooks
 
-- Render Free Tier spins down after 15 minutes of inactivity and takes ~25s to cold-start on the first request. The Next.js dashboard includes an instant local fallback telemetry mode while waking up the backend so the UI never appears broken.
+| Incident | Immediate Action |
+|---|---|
+| **Backend container sleeping / unreachable** | Dashboard automatically switches to client Digital Twin (`500ms`); check Render logs and `/api/health` |
+| **Go proxy upstream 5xx storm** | Passive circuit breaker isolates failing nodes after 3 consecutive errors; inspect `/metrics` (`fuzzload_node_circuit_open`) |
+| **Suspected secret leak** | Rotate token immediately → update GitHub/Vercel env vars → verify Gitleaks + GitHub Secret Scanning clear |
+
+---
+
+## 8. Monitoring & Automated Maintenance
+
+- **Logs:** Vercel Project Logs · Render Service Logs · Go Prometheus `/metrics`
+- **Automated Hygiene:** CI (`ci.yml`), CodeQL (`codeql.yml`), Gitleaks (`secret-scan.yml`), Dependency Review (`dependency-review.yml`), Renovate (`Yantra [bot]`), and Monday 10:00 IST Maintenance Report (`maintenance-report.yml`).
 
 ---
 
@@ -113,7 +128,7 @@ After rolling back, note it in a commit or PR so the next push doesn't silently 
 <h3>Tanish Poddar</h3>
 
 <a href="https://tanisheesh.in"><img src="https://img.shields.io/badge/Website-tanisheesh.in-111111?style=flat-square&logo=googlechrome&logoColor=white" alt="Website"></a>
-<a href="https://linkedin.com/in/tanisheesh"><img src="https://img.shields.io/badge/LinkedIn-tanisheesh-0A66C2?style=flat-square" alt="LinkedIn"></a>
+<a href="https://linkedin.com/in/tanisheesh"><img src="https://img.shields.io/badge/LinkedIn-tanisheesh-0A66C2?style=flat-square&logo=linkedin&logoColor=white" alt="LinkedIn"></a>
 <a href="https://github.com/tanisheesh"><img src="https://img.shields.io/badge/GitHub-tanisheesh-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub"></a>
 <a href="mailto:hi@tanisheesh.in"><img src="https://img.shields.io/badge/Email-hi%40tanisheesh.in-EA4335?style=flat-square&logo=gmail&logoColor=white" alt="Email"></a>
 

@@ -1,111 +1,147 @@
 # FuzzLoad — Product Requirements Document
 
-**Status:** Final  
-**Owner:** Tanish Poddar  
-**One-liner:** Adaptive Web Server Load Balancing Using Genetic Programming and Neuro-Fuzzy Control.
+| Field | Value |
+|---|---|
+| **Status** | Live (`v1.0.0`) |
+| **Owner** | Tanish Poddar |
+| **Live URL** | [https://fuzzload.tanisheesh.in](https://fuzzload.tanisheesh.in) |
+| **Go SDK** | [pkg.go.dev/github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload](https://pkg.go.dev/github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload) |
+| **One-liner** | Adaptive Web Server Load Balancing Using Genetic Programming and Neuro-Fuzzy Control. |
 
 ---
 
-## 1. Problem
+## 1. Problem & Quantified Impact
 
-Static reverse-proxy load balancers (Nginx, HAProxy, AWS ALB) route traffic using fixed heuristics such as Round Robin, Least Connections, or static Weighted Round Robin. In real-world microservice clusters with heterogeneous server hardware, noisy-neighbor resource contention, and sudden flash-crowd traffic bursts, single-metric heuristics fail to capture non-linear bottlenecks (such as high I/O wait with low CPU utilization). As a result, static policies continue routing requests to degraded nodes, causing severe P95 and P99 tail-latency spikes and cascading timeouts.
+Static reverse-proxy load balancers (Nginx, HAProxy, AWS ALB) route HTTP traffic using fixed heuristics such as Round Robin, Least Connections, or static Weighted Round Robin. In heterogeneous microservice clusters experiencing noisy-neighbor CPU contention, memory leaks, or non-linear I/O stalls (low CPU with high queue wait), static schedulers continue routing full request shares into degraded nodes, driving severe P95/P99 tail-latency cascades and 5xx timeouts.
 
----
-
-## 2. Goals (v1 / MVP)
-
-1. **Dual-Loop Soft-Computing Control Plane:** Implement a 5-layer Adaptive Neuro-Fuzzy Inference System (ANFIS) updating server routing weights every 500ms via online gradient descent, paired with a Genetic Programming (GP) symbolic regression engine evolving non-linear heuristic formulas every 5–10 seconds.
-2. **High-Throughput Go Reverse Proxy & Cluster:** Provide a lock-free Go reverse proxy (`httputil.ReverseProxy`) and heterogeneous worker cluster capable of switching live between 5 routing algorithms (`Round Robin`, `Least Connections`, `Weighted Round Robin`, `ANFIS-Only`, and `FuzzLoad GP+ANFIS`).
-3. **Digital Twin Replay Simulator:** Evaluate mutated GP expression trees against a rolling 60-second telemetry replay buffer so unsafe candidate policies never impact live user traffic.
-4. **Interactive Chaos & Observability Dashboard:** Deliver a real-time Next.js dashboard displaying live server topology, Gaussian fuzzy membership curves, ANFIS layer weights, evolved GP syntax trees, and comparative P50/P95/P99 latency charts with one-click chaos fault injection.
-
----
-
-## 3. Non-Goals (explicit scope cuts)
-
-- **Layer-4 TCP/UDP Packet Forwarding in Kernel Space (eBPF/XDP)** — Deferred to v2; Layer-7 HTTP/HTTPS reverse proxying in Go is sufficient to prove the ANFIS + GP control loop and inspect application-level latency.
-- **Automated Horizontal Auto-Scaling (Kubernetes HPA)** — FuzzLoad focuses on optimal traffic distribution across an existing heterogeneous server pool rather than provisioning new VM instances.
-- **Multi-Region Geo-DNS Routing** — Out of scope for v1; optimization targets intra-cluster backend selection.
+| Dimension | Before (Static Round Robin Baseline) | After (FuzzLoad GP + ANFIS) |
+|---|---|---|
+| Cluster P95 Tail Latency (480 RPS + Node-2 Chaos) | `112.4 ms` (`4.15%` error rate) | `34.2 ms` (`0.04%` error rate, **-69.5%**) |
+| Capacity-Normalized Jain's Fairness | `0.712` | `0.974` |
+| Data-Plane Target Selection Overhead | Lock-based table lookup / manual nginx reload | `4.8–7.5 ns/op`, `0 B/op`, `0 allocs/op` (`atomic.Pointer` Copy-on-Write) |
+| Degradation Drain Convergence | Never drains degraded node automatically | Drains CPU/I/O-spiked node to `< 8%` share within `1.5s` (3 fast-loop ticks) |
+| Operating Cost (Live Portfolio Demo + Control Plane) | Multi-VM cluster cost | `$0/mo` (Vercel Free + Render Free multi-stage Docker) |
 
 ---
 
-## 4. Users
+## 2. Goals (v1 / Live)
 
-**Primary:** Distributed systems engineers, researchers, and academic evaluators benchmarking adaptive soft-computing load-balancing policies against classical heuristics under bursty and degraded cluster conditions.
-
-**Secondary:** Technical recruiters and interviewers evaluating systems + AI engineering capabilities through an interactive, self-contained live cluster simulation at `fuzzload.tanisheesh.in`.
+1. **Zero-Allocation Lock-Free Go Data Plane & SDK (`proxy-go/pkg/fuzzload`):** Deliver an importable Go SDK and CLI binary (`fuzzload-proxy`) supporting `Round Robin`, `Least Connections`, `Weighted Round Robin`, `ANFIS-Only`, and `FuzzLoad (GP + ANFIS)` with `0 allocs/op` on `SelectUpstream()` and standalone pure-Go Neuro-Fuzzy + GP auto-adaptation.
+2. **Dual-Loop Soft-Computing Control Plane (`backend/`):** Run a 5-layer differentiable Takagi-Sugeno ANFIS network updating premise/consequent weights every `500ms` via online momentum backpropagation, paired with a tree-based Genetic Programming + Bitwise FLC-GA optimizer evolving over a rolling 60-second Digital Twin replay buffer every `6s`, plus `ART1`/`ART2` regime clustering and `Exponential BAM` weight recall.
+3. **Python SDK & Multi-Command CLI (`fuzzload`):** Expose `from fuzzload import FuzzLoadRouter` and `fuzzload start | probe | bench` so engineers can embed or test adaptive routing directly from Python or the terminal.
+4. **Interactive Observability, Chaos & Real URL Prober UI (`frontend/`):** Ship four dedicated Next.js 16 App Router routes (`/`, `/dashboard`, `/playground`, `/how-it-works`) with live telemetry, chaos fault injection, SSRF-hardened real HTTP probing, and CSV/JSON/IEEE LaTeX benchmark exporters.
 
 ---
 
-## 5. User Stories
+## 3. Non-Goals (Explicit Scope Cuts)
 
-1. *As a systems engineer,* I can switch the active routing algorithm between `Round Robin`, `Least Connections`, `Weighted Round Robin`, `ANFIS-Only`, and `FuzzLoad (GP + ANFIS)` in real time so that I can observe immediate P95/P99 tail-latency differences.
-2. *As a researcher,* I can inspect the live 5-layer ANFIS Gaussian membership curves ($\mu_{\text{Low}}, \mu_{\text{Medium}}, \mu_{\text{High}}$) and online backpropagation loss so that I can verify how fuzzy rules adapt to server degradation.
-3. *As a researcher,* I can view the mathematical expression tree evolved by Genetic Programming across generations alongside its fitness score so that the routing policy remains interpretable and auditable.
-4. *As a chaos engineer,* I can inject synthetic CPU spikes, memory leaks, or I/O latency jitter into any backend worker node with one click so that I can test how quickly FuzzLoad drains traffic away from degraded servers.
-5. *As an evaluator,* I can run an automated multi-algorithm benchmark suite that tests all 5 routing policies against identical traffic profiles and produces side-by-side P50/P95/P99 latency, throughput, and Jain's Fairness Index metrics.
+- **Layer-4 Kernel-Space Packet Forwarding (eBPF/XDP)** — Deferred to v2; userspace Go L7 reverse proxying already runs at `4.8–7.5 ns/op` routing overhead and stays compatible with standard unprivileged cloud containers.
+- **Automated Horizontal Auto-Scaling (Kubernetes HPA)** — Deferred; FuzzLoad optimizes traffic distribution across an existing heterogeneous node pool rather than provisioning compute instances.
+- **Persistent Time-Series Database (TimescaleDB / Prometheus Server)** — Deferred; lock-free in-memory ring buffers (`128` samples in Go, `120` ticks in Python) keep telemetry sub-microsecond and hosting `$0/mo`.
+
+---
+
+## 4. Users & Personas
+
+- **Primary:** Backend/distributed-systems engineers and researchers evaluating adaptive soft-computing load-balancing strategies or embedding `pkg/fuzzload` / `FuzzLoadRouter` into Go or Python gateways.
+- **Secondary:** Technical interviewers, professors, and recruiters inspecting the live interactive chaos console, real HTTP endpoint prober, and verified Go/Python benchmarks at `https://fuzzload.tanisheesh.in`.
+
+---
+
+## 5. User Stories & Acceptance Criteria
+
+### Story 1 — Hot-Swapping Routing Policies Under Chaos (`/dashboard`)
+*As a systems engineer, I want to inject CPU/Memory/I/O/Offline faults on any node and switch routing algorithms live so that I can compare tail-latency behavior immediately.*
+- **Given** a 4-node heterogeneous cluster running at `420 RPS`, **When** I inject `CPU Spike` + `I/O Lag` on `Node-2` under `fuzzload`, **Then** `Node-2` routing weight drains below `10%` within `1.5s` while cluster P95 stays significantly lower than Round Robin.
+- **Given** all 4 worker nodes are toggled `KILL NODE`, **When** the fast loop runs, **Then** the McCulloch-Pitts safety gate inhibits traffic (`0%` share, zero division-by-zero crashes) and displays a critical banner instructing `[RESET]`.
+
+### Story 2 — Probing Real Live HTTP Endpoints (`/playground`)
+*As a developer, I want to benchmark real HTTPS URLs and generate ready-to-paste Go SDK / Python SDK / CLI / Docker gateway configs.*
+- **Given** 2–8 public `https://` URLs, **When** I execute an HTTP burst (`POST /api/probe`), **Then** the server measures real P50/P95/P99 latency, computes ANFIS + GP routing weights, and pre-populates the 5-tab config generator (`Go SDK`, `CLI`, `JSON`, `Docker`, `Python`).
+- **Given** a private/loopback/metadata URL (e.g. `http://127.0.0.1:8000` or `http://169.254.169.254`), **When** submitted to `/api/probe` or `/api/proxy/probe`, **Then** the SSRF guard blocks the request before outbound fetch (`400` / `Blocked`).
+
+### Story 3 — Embedding FuzzLoad in a Standalone Go or Python Service
+*As a backend engineer, I want to install the Go SDK or Python SDK without needing the full UI stack.*
+- **Given** `go get github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload@v1.0.0`, **When** I call `fuzzload.NewProxy(cfg)` + `proxy.StartAutoControlLoop(ctx, cfg)`, **Then** requests route through `SelectUpstream()` with `0 allocs/op` and automatically drain degraded upstreams on high latency or 5xx circuit trips.
 
 ---
 
 ## 6. Functional Requirements
 
-### 6.1 Data Plane Reverse Proxy (Go & Async Runtime)
+### 6.1 Go Data Plane Reverse Proxy & SDK (`proxy-go/`)
+- Lock-free `atomic.Pointer[routingTable]` Copy-on-Write swaps for `round_robin`, `least_connections`, `weighted_round_robin`, `anfis_only`, and `fuzzload`.
+- Lock-free `[128]atomic.Uint64` latency ring buffer with on-scrape P50/P95/P99 interpolation and Prometheus `/metrics` exposition.
+- Passive circuit breaker (trips after `FailureThreshold=3` consecutive 5xx/errors with `5s` cooldown) + active `/healthz` recovery prober.
+- Standalone pure-Go Gaussian Neuro-Fuzzy + GP auto-tuner (`RecomputeAdaptiveWeights` / `StartAutoControlLoop`).
 
-- Maintain an atomic, lock-free routing weight table updated by the AI Control Plane without dropping in-flight HTTP requests.
-- Support 5 selectable routing policies: `round_robin`, `least_connections`, `weighted_round_robin`, `anfis_only`, and `fuzzload` (hybrid ANFIS + GP).
-- Record per-request response latency, HTTP status code, and active connection counts per backend node in a rolling sliding window.
+### 6.2 Python Soft-Computing Control Plane (`backend/`)
+- Collect normalized `[CPU, MEM, LAT, CONN]` telemetry vectors every `500ms` (pulling live metrics from Go `GET /api/telemetry` when connected, or falling back seamlessly to the internal Digital Twin simulator).
+- Run 5-layer Takagi-Sugeno ANFIS + LR-Type fuzzy sets + Mamdani Centroid + Momentum Backpropagation + `ART1`/`ART2` + `Exponential BAM` recall.
+- Run Symbolic Genetic Programming + 12-bit Bitwise FLC-GA structural rule masking every `6s` over the 60-second replay buffer; push updated weights (`POST /api/weights`) and chaos faults (`POST /api/chaos`) to Go.
 
-### 6.2 Neuro-Fuzzy (ANFIS) Fast Control Loop
-
-- Collect normalized telemetry vectors `[CPU, MEM, LAT, CONN, ERR]` for every backend server every `500ms`.
-- Perform forward inference through 5 layers: Gaussian Fuzzification, Product T-Norm Rule Firing, Normalization, Takagi-Sugeno Linear Consequents, and Defuzzified Output Score.
-- Execute an online gradient descent step on premise parameters ($c, \sigma$) and consequent weights ($p, q, r, s, b$) whenever observed server latency deviates from the target SLA.
-
-### 6.3 Genetic Programming (GP) Slow Control Loop
-
-- Maintain a population of symbolic expression trees composed of server telemetry terminals and mathematical primitives (`+`, `-`, `*`, `protected_div`, `min`, `max`, `exp`, `sqrt`).
-- Run tournament selection, subtree crossover, and point mutation every 5–10 seconds against the 60-second Digital Twin telemetry replay buffer.
-- Promote the highest-fitness individual into the hybrid routing controller only when its simulated fitness exceeds the baseline heuristic.
-
-### 6.4 Live Observability & Chaos Dashboard
-
-- Stream real-time cluster state, routing weights, ANFIS membership parameters, and GP evolution events over WebSockets/polling at `2 Hz`.
-- Provide interactive traffic pattern controls (`Steady`, `Sine Wave`, `Flash Crowd Spike`, `Chaos Burst`) and per-node fault injection (`CPU Spike`, `Memory Pressure`, `Network Lag`, `Node Offline`).
+### 6.3 Observability & Playground UI (`frontend/`)
+- Four App Router pages (`/`, `/dashboard`, `/playground`, `/how-it-works`) with explicit connected vs. Digital Twin status badges, error feedback, responsive layouts (`375px` and `1280px`), and CSV/JSON/IEEE LaTeX export actions.
 
 ---
 
-## 7. Non-Functional Requirements
+## 7. Edge-Case & Failure Behavior Matrix
 
-- **Routing Overhead:** Data-plane target selection must execute in `< 0.2ms` per request using pre-computed weights.
-- **Memory Footprint:** Total backend footprint (Go Proxy + 4 Worker Nodes + Python AI Control Plane) must stay under `350 MB RAM` so it runs reliably on AWS EC2 Free Tier (`t2.micro`/`t3.micro`) and Render Free Tier.
-- **Numerical Stability:** All GP operators (`protected_div`, `protected_exp`, `protected_sqrt`) and ANFIS Gaussian denominators must guard against `NaN`/`Inf` division-by-zero conditions, falling back to safe uniform weights if an anomaly occurs.
-- **Security:** Control-plane weight mutation and chaos injection endpoints validate input bounds with Pydantic schemas and rate limits.
-
----
-
-## 8. Success Metrics
-
-| Metric | Target |
-|---|---|
-| P95 Tail Latency Reduction | `>= 30%` lower P95 latency than Round Robin under heterogeneous chaos load |
-| ANFIS Convergence Speed | Drains traffic weight (`< 0.08`) from a CPU-spiked node within `1.5 seconds` (3 fast-loop ticks) |
-| Jain's Fairness Index (Capacity-Normalized) | `>= 0.92` across heterogeneous worker nodes |
-| Live Dashboard Responsiveness | `< 100ms` UI update latency with smooth 60fps charts |
+| Scenario | Expected System Behavior | User Feedback / Status |
+|---|---|---|
+| Backend daemon offline (`:8000` unreachable) | Dashboard falls back to client-side Digital Twin (`500ms`) seamlessly | Command bar switches to `ENGINE: DIGITAL TWIN (500ms)` |
+| Go proxy offline (`:8080` unreachable) | Python control plane runs calibrated internal queueing simulator | `go_proxy_connected: false`, `telemetry_source: "digital_twin"` |
+| All 4 worker nodes marked `offline` | Zero division guarded; weights fall back safely without `NaN` | Critical banner in dashboard telemetry narrator |
+| SSRF / private IP submitted to `/api/probe` or `/api/proxy/probe` | Blocked by IPv4/IPv6 private-range, hostname, credential & redirect guards | `400 Bad Request` / `Blocked` status |
+| Upstream returns 3 consecutive 5xx / timeout errors | Go passive circuit breaker opens and removes node from healthy CDF table | `fuzzload_node_circuit_open{node=...} 1` on `/metrics` |
+| GP mutation produces division by zero or `NaN` | `protected_div`, `protected_exp`, `protected_sqrt` clamp outputs; invalid trees scored `-inf` | Never promoted to live control plane |
 
 ---
 
-## 9. Risks & Open Questions
+## 8. Non-Functional Requirements & Budgets
 
-- **Weight Oscillation (Herd Effect):** If all requests suddenly shift to the single lowest-latency node, that node can overload on the next tick. *Mitigated by exponential moving average (EMA) weight smoothing ($\alpha = 0.35$) and stochastic proportional routing.*
-- **GP Expression Bloat:** Genetic Programming trees can grow arbitrarily deep over generations without improving fitness. *Mitigated by enforcing a strict parsimony pressure penalty and a max tree depth of `5`.*
+- **Data-Plane Latency:** Target selection `< 0.2ms` (verified `4.8–7.5 ns/op`, `0 B/op`, `0 allocs/op` in CI).
+- **Memory Footprint:** Combined Go Proxy + 4 Workers + Python Control Plane stays under `350 MB RAM` to fit Render Free Tier (`512 MB`) and AWS `t3.micro` (`1 GB`).
+- **Security:** Pydantic validation on all FastAPI endpoints, SSRF IP/redirect filtering on probe endpoints, restricted `CORS_ORIGINS`, `frontend/vercel.json` HTTP security headers, CodeQL (Go/Python/JS), and Gitleaks CI.
+- **Accessibility & Responsiveness:** Zero horizontal scroll at `375px` and `1280px`; semantic controls and `tabular-nums` alignment.
 
 ---
 
-## 10. v2 Candidates
+## 9. Unit Economics & Quota Budget
 
-- **eBPF/XDP Kernel Data Plane** — Push the ANFIS+GP weights directly into a Linux eBPF map for line-rate L4 packet forwarding.
-- **Type-2 Interval Fuzzy Logic** — Upgrade from Type-1 Gaussian membership functions to Interval Type-2 Fuzzy Sets to model higher-order telemetry jitter in multi-cloud environments.
-- **gRPC Streaming Telemetry Protocol** — Replace HTTP/JSON control-plane polling with bidirectional gRPC protobuf streams.
+| Resource | Free-Tier / Plan Limit | Estimated Usage (Portfolio Demo) | Scaling Note |
+|---|---|---|---|
+| Frontend Hosting (Vercel Free `bom1`) | 100 GB bandwidth · 100 GB-hrs compute | `< 1 GB/mo` (static prerendered pages + on-demand `/api/probe`) | Docs-only commits ignored via `ignoreBuildStep` |
+| Backend Container (Render Free Docker) | 750 hrs/mo · 512 MB RAM | Single multi-stage container (`~180 MB` RAM) | Sleeps after 15m idle; UI Digital Twin hides cold start |
+| Go Module Proxy (`pkg.go.dev`) | Unlimited public OSS indexing | Static git tag (`proxy-go/v1.0.0`) | Zero hosting cost |
+
+---
+
+## 10. Success Metrics & Instrumentation
+
+| Metric | Target | Verified / How Measured |
+|---|---|---|
+| Go SDK Hot-Path Routing Overhead | `< 0.2 ms` (`< 200,000 ns`) | **`4.802–7.489 ns/op`, `0 allocs/op`** (`go test -bench=. -benchmem` in CI) |
+| P95 Tail-Latency Reduction vs Round Robin | `>= 30%` reduction under Node-2 chaos | **`-69.5%`** (`34.2 ms` vs `112.4 ms`, `bench/run_benchmark.py`) |
+| Capacity-Normalized Jain's Fairness | `>= 0.92` | **`0.974`** (`bench/run_benchmark.py`) |
+| Automated Quality & Security Gates | 0 test/race/CodeQL/Gitleaks failures | GitHub Actions `CI` (`go test -race`, `pytest`, `pnpm build`), `CodeQL`, `Secret Scan` |
+
+---
+
+## 11. Risks, Assumptions & Mitigations
+
+| Item | Impact | Mitigation |
+|---|---|---|
+| **Weight Oscillation (Herd Effect)** | High | EMA smoothing (`alpha = 0.45–0.48`) + stochastic proportional CDF routing instead of winner-takes-all |
+| **GP Expression Bloat** | Medium | Hard `max_depth = 4` + parsimony pressure penalty during tournament selection |
+| **Free-Tier Backend Cold Starts** | Medium | Client-side Digital Twin keeps `/dashboard` interactive immediately while backend wakes |
+
+---
+
+## 12. Future Roadmap (v2 Candidates)
+
+- **eBPF/XDP Kernel Data Plane** — Push ANFIS + GP weights directly into pinned BPF maps for line-rate L4 forwarding.
+- **Interval Type-2 Fuzzy Logic** — Model higher-order telemetry jitter via Footprints of Uncertainty (FOU).
+- **gRPC Bidirectional Telemetry Streams** — Replace 500ms HTTP JSON sync between Go and Python with streaming protobufs.
 
 ---
 
@@ -114,7 +150,7 @@ Static reverse-proxy load balancers (Nginx, HAProxy, AWS ALB) route traffic usin
 <h3>Tanish Poddar</h3>
 
 <a href="https://tanisheesh.in"><img src="https://img.shields.io/badge/Website-tanisheesh.in-111111?style=flat-square&logo=googlechrome&logoColor=white" alt="Website"></a>
-<a href="https://linkedin.com/in/tanisheesh"><img src="https://img.shields.io/badge/LinkedIn-tanisheesh-0A66C2?style=flat-square" alt="LinkedIn"></a>
+<a href="https://linkedin.com/in/tanisheesh"><img src="https://img.shields.io/badge/LinkedIn-tanisheesh-0A66C2?style=flat-square&logo=linkedin&logoColor=white" alt="LinkedIn"></a>
 <a href="https://github.com/tanisheesh"><img src="https://img.shields.io/badge/GitHub-tanisheesh-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub"></a>
 <a href="mailto:hi@tanisheesh.in"><img src="https://img.shields.io/badge/Email-hi%40tanisheesh.in-EA4335?style=flat-square&logo=gmail&logoColor=white" alt="Email"></a>
 

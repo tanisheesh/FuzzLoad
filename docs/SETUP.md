@@ -1,106 +1,127 @@
 # Local Setup — FuzzLoad
 
-> **Just want to try it?** Use the live demo at [https://fuzzload.tanisheesh.in](https://fuzzload.tanisheesh.in) — no setup needed.
-> This guide is for running FuzzLoad locally or self-hosting it.
+> **Just want to try it?** Use the live deployment at [https://fuzzload.tanisheesh.in](https://fuzzload.tanisheesh.in) — zero setup needed.
+> This guide covers running **FuzzLoad** locally, executing the full Go/Python/Next.js verification suite, and troubleshooting common local issues.
 
 ---
 
-## Prerequisites
+## Prerequisites & Versions
 
-- **Node.js 20+** and `npm` (for the Next.js 16 observability dashboard)
-- **Python 3.11+** and `pip` (for the ANFIS + Genetic Programming AI Control Plane)
-- **Go 1.22+** *(optional for native Go execution; Docker handles it automatically if Go is not installed)*
+- **Node.js 22.x** and **pnpm 10+** (for `frontend/` Next.js 16 observability dashboard)
+- **Python 3.12+** and `pip` (for `backend/` 5-Layer ANFIS + GP Control Plane, SDK & CLI)
+- **Go 1.23+** *(optional for native Go SDK/proxy execution; Docker builds it automatically if omitted)*
 - **Docker & Docker Compose** *(optional, for full multi-container cluster mode)*
 
 ---
 
-## 1. Clone and install
+## 1. Clone & Install
 
 ```bash
 git clone https://github.com/tanisheesh/FuzzLoad
 cd FuzzLoad
-```
 
-### Install Backend (Python AI Control Plane)
-```bash
-cd backend
-pip install -r requirements.txt
-cd ..
-```
+# Backend (Python AI Control Plane + `fuzzload` CLI/SDK)
+cd backend && pip install -e ".[dev]" && cd ..
 
-### Install Frontend (Next.js Dashboard)
-```bash
-cd frontend
-npm install
-cd ..
+# Frontend (Next.js 16 Dashboard)
+cd frontend && pnpm install --frozen-lockfile && cd ..
 ```
 
 ---
 
-## 2. Environment variables
+## 2. Environment Variables
 
-Copy `.env.example` to `.env` in the root (and `.env.local` in `frontend/` if customizing ports):
+Copy `.env.example` to `.env` in the repo root (and `frontend/.env.local` if customizing the API URL):
 
 ```bash
 cp .env.example .env
 ```
 
-| Variable | Where to get it |
-|---|---|
-| `NEXT_PUBLIC_API_URL` | URL of the FuzzLoad AI Control Plane (`http://localhost:8000` locally) |
-| `GO_PROXY_URL` | URL of the Go Data Plane Proxy (`http://localhost:8080` when running Go/Docker) |
-| `ANFIS_LEARNING_RATE` | Learning rate for online ANFIS gradient descent (default `0.015`) |
-| `GP_POPULATION_SIZE` | Number of symbolic trees in the Genetic Programming population (default `40`) |
+| Variable | Type / Format | Required | Scope | Local Default / Source |
+|---|---|---|---|---|
+| `NEXT_PUBLIC_API_URL` | Origin URL | ❌ | Public | `http://localhost:8000` |
+| `PORT` | Integer port | ❌ | Server-only | `8000` |
+| `CORS_ORIGINS` | Comma-separated origins | ❌ | Server-only | `http://localhost:3000,https://fuzzload.tanisheesh.in` |
+| `GO_PROXY_URL` | Origin URL | ❌ | Server-only | `http://127.0.0.1:8080` |
+| `GO_PROXY_PORT` | Integer port | ❌ | Server-only | `8080` |
+| `ANFIS_LEARNING_RATE` | Float (`0.001–0.1`) | ❌ | Server-only | `0.015` |
+| `GP_POPULATION_SIZE` | Integer (`12–100`) | ❌ | Server-only | `36` |
+| `GP_BLENDING_LAMBDA` | Float (`0.0–1.0`) | ❌ | Server-only | `0.58` |
+
+> Never commit `.env` or `.env.local`, and never expose server secrets with `NEXT_PUBLIC_`.
 
 ---
 
-## 3. Run locally
+## 3. Run Locally
 
-You can run FuzzLoad in **two modes**:
-
-### Mode A: Full Multi-Container Cluster with Docker Compose (Go Proxy + 4 Workers + Python AI + Next.js UI)
+### Mode A: Full Multi-Container Cluster (Docker Compose)
 
 ```bash
 docker compose up --build
 ```
 
 - **Dashboard UI:** `http://localhost:3000`
-- **Python AI Control Plane API:** `http://localhost:8000`
-- **Go Data Plane Reverse Proxy:** `http://localhost:8080`
+- **Python AI Control Plane API:** `http://localhost:8000/api/health`
+- **Go Data Plane Proxy & Prometheus Metrics:** `http://localhost:8080/healthz` · `http://localhost:8080/metrics`
 
-### Mode B: Fast Local Dev (No Docker Needed)
+### Mode B: Fast Local Dev (No Docker Required)
 
-Terminal 1 — Start the AI Control Plane & Integrated Cluster Simulator:
 ```bash
-cd backend
-uvicorn app.main:app --reload --port 8000
-```
+# Terminal 1 — Go Data Plane Proxy + 4 Heterogeneous Workers (optional)
+cd proxy-go && go run ./cmd/fuzzload-proxy --port 8080 --spawn-workers=true --loadgen-rps=120
 
-Terminal 2 — Start the Next.js 16 Dashboard:
-```bash
-cd frontend
-npm run dev
-```
+# Terminal 2 — Python AI Control Plane
+cd backend && uvicorn app.main:app --reload --port 8000
 
-*(Optional) Terminal 3 — If Go is installed locally, run the standalone Go Reverse Proxy & Worker Nodes:*
-```bash
-cd proxy-go
-go run ./cmd/fuzzload-proxy
+# Terminal 3 — Next.js 16 Dashboard
+cd frontend && pnpm run dev
 ```
-
-FuzzLoad Dashboard will be running at `http://localhost:3000`.
 
 ---
 
-## 4. Deploy to production
+## 4. Run Verification & Full Test Suite
 
-See [DEPLOY.md](DEPLOY.md) for production deployment on **Vercel**, **AWS EC2 (Free Tier / Minimal Cost)**, and **Render**, plus custom domain and rollback steps.
+Run the exact same checks CI enforces before committing:
+
+```bash
+# Go SDK & Proxy (vet + race tests + zero-alloc microbenchmark + build)
+cd proxy-go && go vet ./... && go test -v -race ./... && go test -run=^$ -bench=. -benchmem ./pkg/fuzzload && go build ./...
+
+# Python Backend (compile + ruff + pytest)
+cd backend && python -m compileall -q app fuzzload && ruff check . && python -m pytest -v
+
+# Next.js Frontend (typecheck + production build)
+cd frontend && pnpm run typecheck && pnpm run build
+
+# Reproducible 5-policy benchmark
+python bench/run_benchmark.py
+```
+
+*(If `coderabbit` CLI is installed: `coderabbit review --agent --uncommitted`)*
 
 ---
 
-## Known local-only limitations
+## 5. Known Local-Only Limitations
 
-- When running in Mode B without Docker on Windows/macOS, Linux cgroup CPU throttling is emulated by the calibrated worker queueing model rather than kernel cgroups. Use `docker compose up` to enforce hard Linux container CPU quotas (`cpus: 0.25`, `0.50`, `1.00`).
+- Security headers defined in `frontend/vercel.json` apply at the Vercel edge in production, not under `next dev`.
+- Without Docker, Linux cgroup CPU quotas are emulated by the calibrated worker queueing model; use `docker compose up` for container isolation.
+
+---
+
+## 6. Troubleshooting
+
+| Symptom / Exact Error | Root Cause | Fix |
+|---|---|---|
+| `go_proxy_connected: false` in `/api/health` | Go proxy (`:8080`) not running | Start `go run ./cmd/fuzzload-proxy` or rely on automatic Digital Twin fallback |
+| `400 Blocked unsafe or private probe URL` on `/api/probe` | SSRF protection blocks `localhost`, `127.0.0.1`, RFC1918 & metadata IPs | Probe public `https://` URLs (e.g. `https://httpbin.org/get`) |
+| `Cannot find module 'recharts'` on `next build` | Stale `frontend/node_modules` after branch switch | Run `cd frontend && pnpm install --frozen-lockfile` |
+| `port 8000 or 8080 already in use` | Existing proxy/API process bound to port | Pass `--port 8001` to `fuzzload start` or `--port 8081` to `fuzzload-proxy` |
+
+---
+
+## 7. Deploy to Production
+
+See [DEPLOY.md](DEPLOY.md) for Vercel, Render, and AWS EC2 production setup, post-deploy smoke checks, and rollback procedures.
 
 ---
 
@@ -109,7 +130,7 @@ See [DEPLOY.md](DEPLOY.md) for production deployment on **Vercel**, **AWS EC2 (F
 <h3>Tanish Poddar</h3>
 
 <a href="https://tanisheesh.in"><img src="https://img.shields.io/badge/Website-tanisheesh.in-111111?style=flat-square&logo=googlechrome&logoColor=white" alt="Website"></a>
-<a href="https://linkedin.com/in/tanisheesh"><img src="https://img.shields.io/badge/LinkedIn-tanisheesh-0A66C2?style=flat-square" alt="LinkedIn"></a>
+<a href="https://linkedin.com/in/tanisheesh"><img src="https://img.shields.io/badge/LinkedIn-tanisheesh-0A66C2?style=flat-square&logo=linkedin&logoColor=white" alt="LinkedIn"></a>
 <a href="https://github.com/tanisheesh"><img src="https://img.shields.io/badge/GitHub-tanisheesh-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub"></a>
 <a href="mailto:hi@tanisheesh.in"><img src="https://img.shields.io/badge/Email-hi%40tanisheesh.in-EA4335?style=flat-square&logo=gmail&logoColor=white" alt="Email"></a>
 

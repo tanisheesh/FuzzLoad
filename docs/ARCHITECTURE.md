@@ -2,136 +2,170 @@
 
 ---
 
-## 1. Stack
+## 1. Stack & Runtime Versions
 
-| Layer | Tech |
-|---|---|
-| Frontend Dashboard | Next.js 16 (App Router, TypeScript) · Tailwind CSS 4 · Recharts · Lucide Icons |
-| Data Plane (Reverse Proxy) | Go 1.23 (`net/http/httputil.ReverseProxy` · `sync/atomic` routing table · Goroutines) |
-| AI Control Plane | Python 3.12 · FastAPI · Differentiable 5-Layer ANFIS · DEAP Genetic Programming · NumPy |
-| Heterogeneous Backend Cluster | 4 Worker Nodes (`node-1` to `node-4` with distinct CPU cores, RAM caps, and I/O profiles) |
-| Telemetry & Replay Store | Lock-free In-Memory Ring Buffer (60s rolling window) + optional Redis sync |
-| Hosting | Vercel (Frontend) · AWS EC2 `t3.micro` Docker Compose / Render Multi-Stage Docker (Backend) |
+| Layer | Technology & Version | Runtime / Region / Notes |
+|---|---|---|
+| Frontend Dashboard | Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 3 · Recharts 3 | Node 22.x · Vercel (`bom1`) · `frontend/vercel.json` security headers |
+| Data Plane & Go SDK | Go 1.23 (`net/http/httputil.ReverseProxy` · `sync/atomic.Pointer` · `LatencyRing`) | Published at `proxy-go/pkg/fuzzload@v1.0.0` (`4.8–7.5 ns/op`, `0 allocs/op`) |
+| AI Control Plane & Python SDK | Python 3.12 · FastAPI · Pydantic v2 · Uvicorn · 5-Layer ANFIS · Symbolic GP · ART1/ART2/BAM | Installable package `fuzzload` + CLI `fuzzload start \| probe \| bench` |
+| Testing & Security | `go test -race` · `pytest` · `ruff` · `tsc --noEmit` · CodeQL (Go/Python/JS) · Gitleaks v3 | Enforced on every push and PR via `.github/workflows/` |
+| Hosting & Automation | Vercel (Frontend) · Multi-Stage Docker / Render / EC2 (Backend) · Renovate (`Yantra [bot]`) | Live at `https://fuzzload.tanisheesh.in` |
 
 ---
 
-## 2. Components
+## 2. System Topology & Components
+
+```mermaid
+flowchart LR
+  Client[Browser / HTTP Clients] -->|HTTPS| UI[Next.js 16 Dashboard & /api/probe]
+  Client -->|HTTP :8080| GoProxy[Go Data Plane Proxy<br/>atomic.Pointer CDF Table<br/>4.8-7.5 ns/op, 0 allocs]
+  GoProxy -->|httputil.ReverseProxy| Workers[4 Heterogeneous Worker Nodes<br/>:9001..9004 / Custom Upstreams]
+  GoProxy -->|GET /api/telemetry| PyAI[Python AI Control Plane :8000<br/>500ms ANFIS + ART/BAM<br/>6s Symbolic GP + FLC-GA]
+  PyAI -->|POST /api/weights & /api/chaos| GoProxy
+  PyAI -->|REST & 2Hz WS /ws/telemetry| UI
+  GoProxy -->|GET /metrics| Prom[Prometheus Scraper]
+```
 
 ```text
 FuzzLoad/
-  proxy-go/        Go HTTP reverse proxy & multi-node worker cluster binary
-  backend/         Python FastAPI AI Control Plane (5-layer ANFIS + DEAP GP + Digital Twin)
-  frontend/        Next.js 16 real-time observability & chaos engineering dashboard
-  docs/            System architecture, research blueprint, PRD, decisions, setup & deploy guides
+├── proxy-go/                        # Go 1.23 Data Plane SDK & Binary
+│   ├── pkg/fuzzload/
+│   │   ├── router.go                # Lock-free atomic.Pointer routing table + http.Handler
+│   │   ├── telemetry.go             # Lock-free [128]atomic.Uint64 LatencyRing + /metrics
+│   │   ├── health.go                # Passive circuit breaker + active /healthz prober
+│   │   ├── adaptive.go              # Standalone pure-Go Gaussian Neuro-Fuzzy + GP loop
+│   │   ├── worker.go                # Configurable heterogeneous worker simulator
+│   │   ├── doc.go                   # Package GoDoc overview
+│   │   └── router_test.go / example_test.go
+│   └── cmd/fuzzload-proxy/main.go   # CLI entrypoint (--port, --upstreams, --policy, --standalone-auto)
+├── backend/                         # Python 3.12 FastAPI Control Plane & SDK
+│   ├── fuzzload/__init__.py         # Public SDK export (`from fuzzload import FuzzLoadRouter`)
+│   ├── app/
+│   │   ├── main.py                  # FastAPI REST + WebSocket + SSRF-hardened /api/proxy/probe
+│   │   ├── cli.py                   # `fuzzload start | probe | bench` + `FuzzLoadRouter`
+│   │   ├── ai_engine/               # `anfis.py`, `gp_optimizer.py`, `art_bam_memory.py`
+│   │   └── cluster/simulator.py     # Bidirectional Go sync + Digital Twin replay buffer
+│   └── tests/test_fuzzload.py       # Unit, integration, chaos, bidirectional sync & SSRF tests
+├── frontend/                        # Next.js 16 App Router Dashboard
+│   ├── vercel.json                  # Edge security headers (HSTS, X-Frame-Options, nosniff)
+│   └── src/
+│       ├── app/                     # `/`, `/dashboard`, `/playground`, `/how-it-works`, `/api/probe`
+│       ├── components/              # `Navbar.tsx`, `Footer.tsx`
+│       └── lib/fuzzload-engine.ts   # Typed schemas + client-side Digital Twin fallback
+└── bench/                           # Reproducible Digital Twin & --live-go socket benchmarks
 ```
 
-### Go Reverse Proxy & Worker Cluster (`proxy-go/`)
-
-Receives incoming HTTP client traffic and routes each request in `<0.2ms` using an atomic in-memory routing table. Supports 5 algorithms (`round_robin`, `least_connections`, `weighted_round_robin`, `anfis_only`, `fuzzload`). Also spawns 4 lightweight Go backend worker servers (`:9001`–`:9004`) with configurable CPU capacities, memory ceilings, and chaos fault states. Does not run neural network training or genetic evolution inline.
+### Go Reverse Proxy & SDK (`proxy-go/`)
+Handles hot-path HTTP forwarding with zero locks and zero heap allocations on `SelectUpstream()`. Stores per-request latency samples in a fixed `[128]atomic.Uint64` ring buffer so sorting only executes on `/api/telemetry` or `/metrics` scrape. Supports standalone pure-Go Neuro-Fuzzy + GP adaptation (`StartAutoControlLoop`) or external Python control-plane weight injection.
 
 ### Python AI Control Plane (`backend/`)
+Runs two cooperative soft-computing loops out of band:
+1. **Fast Loop (`500ms`):** Pulls live socket telemetry from Go (`GET /api/telemetry`, falling back to its Digital Twin simulator when Go is offline), runs 5-layer Takagi-Sugeno ANFIS online momentum backpropagation + `ART1`/`ART2` regime clustering + `Exponential BAM` prior recall, and pushes updated weights via `POST /api/weights`.
+2. **Slow Loop (`6s`):** Evaluates 36 symbolic GP expression trees + a 12-bit Bitwise FLC-GA chromosome across the 60-second telemetry replay buffer, applying structural rule masks and promoting elite formulas only when simulated fitness improves.
 
-Runs the dual-loop soft-computing optimization engine and exposes REST + WebSocket APIs for the dashboard. Every `500ms`, the **Fast Loop (5-Layer ANFIS)** pulls node telemetry, computes fuzzy rule firing strengths, updates routing weights, and performs a single online backpropagation step against observed SLA latency. Every `6s`, the **Slow Loop (Genetic Programming)** evolves a population of 40 symbolic expression trees across 15 generations on the 60-second Digital Twin replay buffer and updates the symbolic heuristic $\Phi_{\text{GP}}(\mathbf{x}_i)$. Also includes an integrated async simulation coordinator so the backend can operate standalone or paired with the Go proxy.
-
-### Next.js Observability & Chaos Dashboard (`frontend/`)
-
-Renders the live cluster topology, dynamic routing weight bars, Gaussian membership curves ($\mu_{\text{Low}}, \mu_{\text{Medium}}, \mu_{\text{High}}$), ANFIS backpropagation loss history, the currently active GP symbolic expression tree, and live P50/P95/P99 latency comparison charts. Provides controls to switch algorithms, change traffic profiles, inject node chaos, and run automated comparative benchmarks.
+### Next.js 16 Observability & Playground UI (`frontend/`)
+Renders `/`, `/dashboard`, `/playground`, and `/how-it-works`. Polls the FastAPI backend when live (`CONTROL PLANE: LIVE (:8000)` + `DATA PLANE: GO PROXY (:8080)`) and degrades gracefully to the in-browser Digital Twin engine when backend containers sleep.
 
 ---
 
-## 3. Data Flow
+## 3. End-to-End Request & Control-Loop Flow
 
-```text
-[Traffic Generator / Browser]
-        │
-        ▼  HTTP Requests
-┌───────────────────────────────┐
-│   Go Data Plane Proxy (:8080) │ ── Atomic Weight Lookup (<0.2ms) ──► [Worker Nodes :9001..9004]
-└───────┬───────────────▲───────┘                                              │
-        │               │                                                      │
-        │ Telemetry     │ Push Updated Weights                                 │ Per-Request Latency
-        │ Snapshot      │ P = [w1, w2, w3, w4]                                 │ CPU / Mem / Conns
-        ▼               │                                                      ▼
-┌───────────────────────┴──────────────────────────────────────────────────────┐
-│                   Python AI Control Plane (:8000)                            │
-│                                                                              │
-│  [Fast Loop: Every 500ms]                     [Slow Loop: Every 6s]          │
-│   1. Fuzzify [CPU, MEM, LAT, CONN]             1. Read 60s Replay Buffer     │
-│   2. 5-Layer ANFIS Forward Pass                2. Evaluate 40 GP Syntax Trees│
-│   3. Online Backprop on SLA Error              3. Crossover + Mutation       │
-│   4. Combine S_ANFIS + Phi_GP ───────────────◄ 4. Promote Elite Formula      │
-└───────────────────────────────┬──────────────────────────────────────────────┘
-                                │
-                                ▼  WebSocket / JSON Stream (2 Hz)
-                 [Next.js 16 Live Dashboard (:3000)]
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Client as HTTP Client
+  participant Go as Go Data Plane (:8080)
+  participant Node as Upstream Worker
+  participant Py as Python Control Plane (:8000)
+  participant UI as Next.js Dashboard
+
+  Client->>Go: GET /work
+  Go->>Go: SelectUpstream() via atomic.Pointer (~5-7ns, 0 allocs)
+  Go->>Node: Forward HTTP request
+  Node-->>Go: 200 OK (latency recorded in LatencyRing)
+  Go-->>Client: 200 OK + X-FuzzLoad-Node header
+
+  loop Every 500ms (Fast Loop)
+    Py->>Go: GET /api/telemetry
+    Go-->>Py: P50/P95/P99, conns, CPU/Mem, error_rate
+    Py->>Py: 5-Layer ANFIS Backprop + ART1/ART2 + Exponential BAM
+    Py->>Go: POST /api/weights (atomic Copy-on-Write swap)
+    Py-->>UI: JSON / WS state snapshot
+  end
+
+  loop Every 6s (Slow Loop)
+    Py->>Py: Evolve 36 GP trees + 12-bit FLC-GA over 60s Replay Buffer
+  end
 ```
 
-1. **Request Arrival & Forwarding:** Client requests hit the Reverse Proxy, which selects a target backend node $i$ with probability $P_i$ (when in `fuzzload` or `anfis_only` mode) or deterministic rules (`round_robin`, `least_connections`, `weighted_round_robin`).
-2. **Telemetry Recording:** Upon response completion, the proxy updates sliding-window P50/P95/P99 latency, active connections, CPU load, memory usage, and error rates for node $i$, appending the trace to the 60-second Digital Twin replay buffer.
-3. **ANFIS Fast Loop (500ms):** The 5-layer Neuro-Fuzzy network evaluates Gaussian membership functions for each node, computes Takagi-Sugeno rule outputs, updates premise ($c, \sigma$) and consequent ($p, q, r, s, b$) parameters via gradient descent to penalize SLA violations, and outputs crisp score $S_{\text{ANFIS}}(\mathbf{x}_i)$.
-4. **Genetic Programming Slow Loop (6s):** The GP optimizer evolves symbolic mathematical trees on the replay buffer, selecting the expression $\Phi_{\text{GP}}(\mathbf{x}_i)$ that minimizes simulated P95 latency and load variance.
-5. **Weight Publication & UI Broadcast:** The combined weight $W_i = \lambda S_{\text{ANFIS}}(\mathbf{x}_i) + (1-\lambda)\Phi_{\text{GP}}(\mathbf{x}_i)$ is smoothed via EMA, normalized into routing probabilities $P_i$, pushed to the proxy routing table, and broadcast to the Next.js dashboard.
-
 ---
 
-## 4. State & Telemetry Schema
+## 4. State, Telemetry Schema & In-Memory Ring Buffers
 
-FuzzLoad operates entirely on real-time in-memory ring buffers for sub-millisecond speed:
+FuzzLoad deliberately stores telemetry in bounded in-memory ring buffers rather than an external SQL database to preserve sub-microsecond hot paths and `$0/mo` cloud deployment:
 
-- `NodeTelemetry` — `node_id`, `name`, `capacity_cores`, `cpu_usage` ($[0,1]$), `mem_usage` ($[0,1]$), `active_connections`, `p50_latency_ms`, `p95_latency_ms`, `p99_latency_ms`, `error_rate`, `routing_weight`, `requests_served`, `chaos_state` (`cpu_spike`, `mem_leak`, `io_lag`, `offline`).
-- `ANFISState` — `epoch`, `learning_rate`, `current_loss`, `membership_curves` (`cpu`, `latency`, `connections` Gaussian centers $c$ and sigmas $\sigma$ for `Low`, `Medium`, `High`), `rule_activations` (top firing Takagi-Sugeno rules).
-- `GPEvolutionState` — `generation`, `population_size`, `best_fitness`, `best_expression_str`, `best_expression_tree` (hierarchical AST nodes for UI rendering), `fitness_history`.
-- `BenchmarkReport` — Comparative run results across `round_robin`, `least_connections`, `weighted_round_robin`, `anfis_only`, and `fuzzload` (`avg_latency_ms`, `p95_latency_ms`, `p99_latency_ms`, `throughput_rps`, `error_rate_pct`, `jains_fairness_index`).
-
----
-
-## 5. API Routes
-
-| Method | Route | Description |
+| Structure | Capacity / Bounds | Purpose |
 |---|---|---|
-| `GET` | `/api/health` | Health check returning control plane, proxy, and worker cluster status |
-| `GET` | `/api/state` | Full real-time snapshot of cluster telemetry, ANFIS layers, GP tree, and metrics |
-| `POST` | `/api/config/algorithm` | Hot-swaps active routing algorithm (`round_robin`, `least_connections`, `weighted_round_robin`, `anfis_only`, `fuzzload`) |
-| `POST` | `/api/config/traffic` | Updates live traffic generator profile (`steady`, `sine_wave`, `flash_crowd`, `chaos_burst`) and RPS |
-| `POST` | `/api/chaos/inject` | Injects or clears synthetic faults (`cpu_spike`, `mem_leak`, `io_lag`, `offline`) on a target node |
-| `POST` | `/api/gp/evolve` | Triggers an immediate Genetic Programming evolutionary generation cycle |
-| `POST` | `/api/benchmark/run` | Runs a comparative benchmark across all 5 algorithms and returns comparative metrics |
-| `WS` | `/ws/telemetry` | Streams live cluster, ANFIS, and GP state updates at 2 Hz to the dashboard |
+| Go `LatencyRing` | `128` `atomic.Uint64` µs slots per node | Zero-allocation hot-path latency capture; sorted only on scrape |
+| Python `replay_buffer` | `120` ticks (`60s` @ `2 Hz`) | Safe offline Digital Twin fitness evaluation for GP generations |
+| Python `metrics_history` | `45` ticks | Real-time P95 latency & fairness trend charts in `/dashboard` |
+| `ART2` Prototype Store | Dynamic categories (vigilance `ρ = 0.86`) | Online workload regime classification |
+| `Exponential BAM` Memory | Seeded + reinforced stress→weight pairs | One-shot heterocorrelator routing weight recall |
 
 ---
 
-## 6. Security
+## 5. Concurrency & Failure Isolation
 
-- **Input Validation:** All algorithm switches, traffic intensity settings, and chaos fault injections are strictly validated via Pydantic schemas with bounded numeric ranges (`rps <= 2000`, valid `node_id` enums).
-- **Safe Symbolic Evaluation:** Genetic Programming expressions are never evaluated with Python `eval()` on arbitrary user strings; trees are constructed exclusively from a whitelisted primitive set with protected mathematical operators (`protected_div`, `protected_exp`, `protected_sqrt`).
-- **CORS & Rate Limiting:** Production API restricts origins to `https://fuzzload.tanisheesh.in` and localhost dev ports.
-
----
-
-## 7. Error Handling & Reliability
-
-| Failure | Behaviour |
-|---|---|
-| Backend worker node goes `offline` | Health probe marks node unhealthy; weight is immediately clamped to `0.0` and traffic drains to surviving nodes |
-| Numerical overflow (`NaN`/`Inf`) in GP formula | Protected operators clamp outputs to `[-100, 100]`; if a tree still yields `NaN`, fitness is set to $-\infty$ and discarded |
-| All servers exceed SLA latency simultaneously | ANFIS normalizes relative scores and falls back to capacity-weighted distribution rather than dropping all weights to zero |
-| Go proxy unreachable in single-container mode | Python Control Plane seamlessly runs its internal async cluster & proxy loop so the dashboard remains 100% functional |
+- **Zero-Lock Hot Path:** Go `Proxy.table` is an `atomic.Pointer[routingTable]`. Control-plane writes (`UpdateWeights`, `SetNodeChaos`, circuit-breaker transitions) construct a new immutable `routingTable` under `updateMu` and atomically swap the pointer without stalling readers.
+- **EMA Weight Smoothing:** Target weights are blended via Exponential Moving Average (`alpha = 0.45–0.48`) to avoid herd oscillation across worker nodes.
+- **Circuit Breaker Isolation:** Three consecutive upstream 5xx/connection failures open a node's circuit for a `5s` cooldown; background `/healthz` probes restore the node automatically upon recovery.
 
 ---
 
-## 8. Deployment
+## 6. API Contracts
 
-1. **Frontend (`frontend/`):** Deployed on **Vercel** (`https://fuzzload.tanisheesh.in`), automatically built on every push to `main`.
-2. **Backend Cluster (`proxy-go/` + `backend/`):**
-   - **Option A (AWS EC2 Free Tier / Minimal Cost):** `docker compose up -d --build` on an AWS EC2 `t3.micro` / `t4g.small` instance runs the Go Proxy, 4 Worker Containers, and Python AI Control Plane.
-   - **Option B (Render Free Tier Single Container):** Root multi-stage `Dockerfile` compiles the Go proxy/workers and starts them alongside the FastAPI AI Control Plane inside a single free web service.
+| Plane | Method | Route | Validation & Constraints | Responses |
+|---|---|---|---|---|
+| Control (`:8000`) | `GET` | `/api/health` | Public | `200` control-plane & Go link status |
+| Control (`:8000`) | `GET` | `/api/state` | Public | `200` full cluster, ANFIS, GP, ART/BAM snapshot |
+| Control (`:8000`) | `POST` | `/api/config/algorithm` | Enum of 5 policies | `200` updated state · `400` invalid policy |
+| Control (`:8000`) | `POST` | `/api/config/traffic` | `base_rps` `60..1500` | `200` · `400`/`422` out of bounds |
+| Control (`:8000`) | `POST` | `/api/chaos/inject` | Valid `node_id` & `fault_type` | `200` (syncs to Go `POST /api/chaos`) · `400` |
+| Control (`:8000`) | `POST` | `/api/gp/evolve` | `generations` `1..20` | `200` evolved formula & FLC-GA mask · `422` |
+| Control (`:8000`) | `POST` | `/api/proxy/probe` | Max 8 targets, 10 reqs; SSRF guard | `200` measured weights · `400` blocked private URL |
+| Control (`:8000`) | `WS` | `/ws/telemetry` | `2 Hz` stream | JSON telemetry frames |
+| Edge (`frontend`) | `POST` | `/api/probe` | Max 8 targets, 10 reqs; SSRF + `redirect: "error"` | `200` probed P50/P95 + ANFIS/GP share · `400` |
+| Data (`:8080`) | `GET` | `/api/telemetry` | Public | `200` live node snapshots |
+| Data (`:8080`) | `POST` | `/api/weights` | JSON weights map | `200` atomic swap · `400` |
+| Data (`:8080`) | `GET` | `/metrics` | Public | `200` Prometheus exposition format |
+
+---
+
+## 7. Security Controls
+
+- **Boundary Validation:** All FastAPI request payloads are validated via Pydantic models (`ge`/`le` bounds); `/api/probe` enforces explicit URL, count (`<= 8`), and burst (`<= 10`) caps.
+- **SSRF Protection:** Both `frontend/src/app/api/probe/route.ts` and `backend/app/main.py` enforce `http(s)` schemes, reject embedded credentials, disable unsafe redirects, and block loopback (`127.0.0.0/8`, `::1`), RFC1918 private networks (`10/8`, `172.16/12`, `192.168/16`), link-local/cloud metadata (`169.254.0.0/16`, `metadata.google.internal`), and `.local`/`.internal` hosts.
+- **CORS & HTTP Headers:** FastAPI restricts origins via `CORS_ORIGINS`; `frontend/vercel.json` enforces `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and `Strict-Transport-Security`.
+- **Safe Symbolic Evaluation:** GP expression trees evaluate only whitelisted protected operators (`protected_div`, `protected_exp`, `protected_sqrt`) — `eval()` is never called on arbitrary strings.
+
+---
+
+## 8. Performance Budgets & Scale Ceilings
+
+| Parameter / Limit | Current Configured Value | What Breaks at 10x / 100x Load | Next Scaling Step |
+|---|---|---|---|
+| Go `SelectUpstream()` | `4.8–7.5 ns/op`, `0 allocs/op` (`~133M ops/sec` across 4 cores) | OS TCP socket & file-descriptor limits (`ulimit -n`) saturate long before router CPU | Tune Linux kernel TCP stack or move L4 path to eBPF/XDP |
+| Control-Plane Weight Sync | `500ms` HTTP JSON poll (`GET /api/telemetry` + `POST /api/weights`) | Cluster size `> 200` nodes increases JSON serialization & ANFIS matrix time | Switch sync to streaming gRPC protobufs + NumPy/C++ vectorization |
+| Digital Twin Replay Buffer | `120` ticks (`60s`) in RAM | Very large clusters (`> 500` nodes) increase replay memory footprint | Partition GP evaluation per availability zone or sample top-K nodes |
+| Render Free Tier Container | `512 MB RAM`, sleeps after `15m` idle | Cold start (~25s) on first live API hit | Keep live UI resilient via client Digital Twin or move to AWS EC2 `t4g.small` |
 
 ---
 
 ## 9. Explicit Scope Cuts
 
-- **Kernel-space eBPF packet routing** — Deferred to v2 to keep deployment compatible with standard cloud containers (Render/AWS EC2) without requiring privileged root kernel headers.
-- **Persistent PostgreSQL/TimescaleDB storage** — Deferred to v2; a rolling in-memory ring buffer provides zero-latency telemetry access and eliminates external database hosting costs.
+- **Kernel-space eBPF packet routing** — Deferred to v2 to remain compatible with unprivileged containers on Render/Docker Desktop.
+- **External TimescaleDB telemetry persistence** — Deferred to v2 to keep read/write latency sub-microsecond and hosting `$0/mo`.
 
 ---
 
@@ -140,7 +174,7 @@ FuzzLoad operates entirely on real-time in-memory ring buffers for sub-milliseco
 <h3>Tanish Poddar</h3>
 
 <a href="https://tanisheesh.in"><img src="https://img.shields.io/badge/Website-tanisheesh.in-111111?style=flat-square&logo=googlechrome&logoColor=white" alt="Website"></a>
-<a href="https://linkedin.com/in/tanisheesh"><img src="https://img.shields.io/badge/LinkedIn-tanisheesh-0A66C2?style=flat-square" alt="LinkedIn"></a>
+<a href="https://linkedin.com/in/tanisheesh"><img src="https://img.shields.io/badge/LinkedIn-tanisheesh-0A66C2?style=flat-square&logo=linkedin&logoColor=white" alt="LinkedIn"></a>
 <a href="https://github.com/tanisheesh"><img src="https://img.shields.io/badge/GitHub-tanisheesh-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub"></a>
 <a href="mailto:hi@tanisheesh.in"><img src="https://img.shields.io/badge/Email-hi%40tanisheesh.in-EA4335?style=flat-square&logo=gmail&logoColor=white" alt="Email"></a>
 
