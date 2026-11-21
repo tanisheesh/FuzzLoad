@@ -131,3 +131,16 @@ FuzzLoad/
 2. **Backend (`proxy-go/` + `backend/`):**
    - **Option A (Render Free Tier — $0/month):** Uses the root multi-stage `Dockerfile` + `render.yaml` to compile the Go binary and run it alongside FastAPI in a single container.
    - **Option B (AWS EC2 Free Tier `t3.micro` — $0/month for 12 months, or ~$3/month Spot):** Uses `docker-compose.yml` to run the Go Proxy, Python AI Control Plane, and Dashboard with container isolation.
+
+---
+
+<div align="center">
+
+<h3>Tanish Poddar</h3>
+
+<a href="https://tanisheesh.in"><img src="https://img.shields.io/badge/Website-tanisheesh.in-111111?style=flat-square&logo=googlechrome&logoColor=white" alt="Website"></a>
+<a href="https://linkedin.com/in/tanisheesh"><img src="https://img.shields.io/badge/LinkedIn-tanisheesh-0A66C2?style=flat-square&logo=linkedin&logoColor=white" alt="LinkedIn"></a>
+<a href="https://github.com/tanisheesh"><img src="https://img.shields.io/badge/GitHub-tanisheesh-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub"></a>
+<a href="mailto:hi@tanisheesh.in"><img src="https://img.shields.io/badge/Email-hi%40tanisheesh.in-EA4335?style=flat-square&logo=gmail&logoColor=white" alt="Email"></a>
+
+</div>

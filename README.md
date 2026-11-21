@@ -49,15 +49,27 @@ Traditional reverse-proxy load balancers rely on static heuristics like Round Ro
 
 ---
 
+## By the numbers
+
+| Metric | Value | Source |
+|---|---|---|
+| Go SDK Hot-Path Lookup (`SelectUpstream`) | `4.8–7.5 ns/op` · `0 B/op` · `0 allocs/op` | `proxy-go/pkg/fuzzload/router_test.go` (GitHub Actions CI) |
+| Go Latency Ring Write (`LatencyRing.Record`) | `14.9–45.1 ns/op` · `0 B/op` · `0 allocs/op` | `proxy-go/pkg/fuzzload/telemetry.go` (GitHub Actions CI) |
+| P95 Tail-Latency Reduction (480 RPS + Chaos) | `-69.5%` (`34.2 ms` vs `112.4 ms` Round Robin) | `bench/run_benchmark.py` · `bench/README.md` |
+| Capacity-Normalized Jain's Fairness | `0.974` (`0.04%` error rate) | `bench/run_benchmark.py` |
+| Automated Verification Suite | `5` Go race tests + `1` GoDoc example + `9` Python tests + CodeQL + Gitleaks | `.github/workflows/` |
+
+---
+
 ## Stack
 
 | Layer | Tech |
 |---|---|
-| Frontend | Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · Recharts · Lucide Icons |
-| Data Plane (Proxy) | Go 1.23 (`net/http/httputil` · Atomic Weight Table · Goroutine Worker Pool) |
-| AI Control Plane | Python 3.12 · FastAPI · Differentiable 5-Layer ANFIS · DEAP Genetic Programming · NumPy |
-| Cluster & Telemetry | Heterogeneous Go/Python Worker Nodes · Sliding-Window P50/P95/P99 Telemetry · Chaos Injector |
-| Infra & Deployment | Vercel (Frontend) · AWS EC2 Free Tier / Render Multi-Stage Docker (Backend Cluster) |
+| Frontend | Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 3 · Recharts 3 |
+| Data Plane & Go SDK | Go 1.23 (`net/http/httputil` · `atomic.Pointer` · `LatencyRing` · `pkg/fuzzload@v1.0.0`) |
+| AI Control Plane & Python SDK | Python 3.12 · FastAPI · Pydantic v2 · 5-Layer ANFIS · Symbolic GP · ART1/ART2/BAM · `fuzzload` CLI |
+| Cluster & Telemetry | Heterogeneous Go Workers · Sliding-Window P50/P95/P99 · Prometheus `/metrics` · Chaos Injector |
+| Infra & Security | Vercel (`bom1`, security headers) · Multi-Stage Docker / Render · CodeQL · Gitleaks · Renovate (`Yantra [bot]`) |
 
 ---
 

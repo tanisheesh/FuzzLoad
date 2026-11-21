@@ -24,11 +24,14 @@ git clone https://github.com/tanisheesh/FuzzLoad
 cd FuzzLoad
 cp .env.example .env
 
-# Backend (Python AI Control Plane)
-cd backend && pip install -r requirements.txt && uvicorn app.main:app --reload --port 8000
+# Backend (Python AI Control Plane + CLI/SDK)
+cd backend && pip install -e ".[dev]" && uvicorn app.main:app --reload --port 8000
 
 # Frontend (Next.js 16 Dashboard)
-cd frontend && npm install && npm run dev
+cd frontend && pnpm install --frozen-lockfile && pnpm run dev
+
+# Go Data Plane Proxy (optional)
+cd proxy-go && go run ./cmd/fuzzload-proxy --port 8080 --spawn-workers=true
 ```
 
 ---
@@ -49,11 +52,12 @@ cd frontend && npm install && npm run dev
 3. **Check it locally** before pushing:
 
    ```bash
-   cd backend && pytest -q
-   cd ../frontend && npm run lint && npm run build
+   cd proxy-go && go vet ./... && go test -v -race ./... && go build ./...
+   cd ../backend && python -m compileall -q app fuzzload && ruff check . && pytest -q
+   cd ../frontend && pnpm run typecheck && pnpm run build
    ```
 
-4. **Open a pull request** against `main`. The PR template will guide you.
+4. **Open a pull request** against `main`. Use a clean **past-tense** PR title (e.g. `Added pure-Go adaptive control loop`). The PR template will guide you.
 
 ---
 
