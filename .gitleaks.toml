@@ -1,0 +1,12 @@
+# Gitleaks configuration for FuzzLoad
+title = "FuzzLoad Gitleaks Config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Ignore Recharts JSX dataKey telemetry field names (false positive for generic-api-key)"
+regexTarget = "line"
+regexes = [
+  '''dataKey="(round_robin_p95_ms|least_conn_p95_ms|fuzzload_p95_ms|p50_latency_ms|p95_latency_ms|p99_latency_ms)"''',
+]
