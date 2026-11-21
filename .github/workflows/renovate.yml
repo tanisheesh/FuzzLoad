@@ -1,0 +1,74 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  TANISH'S SETUP TOOLKIT · tanisheesh.in                              ║
+# ║  Renovate dependency updater using custom bot user (BOT_TOKEN).      ║
+# ║  Goes to: <repo>/.github/workflows/renovate.yml                      ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+#
+# Runs every Monday 06:00 IST using your dedicated bot account (BOT_TOKEN),
+# so PRs, commits, and the Contributors list display your custom bot's
+# profile picture and Display Name instead of dependabot[bot].
+#
+# Setup: set BOT_TOKEN in setup-toolkit/.env and run setup-github-repo.ps1.
+
+name: Renovate
+
+on:
+  schedule:
+    - cron: "30 0 * * 1"   # Monday 00:30 UTC = 06:00 IST
+  workflow_dispatch:
+
+concurrency:
+  group: renovate-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HAS_BOT_TOKEN: ${{ secrets.BOT_TOKEN != '' }}
+    steps:
+      - name: Check BOT_TOKEN
+        if: env.HAS_BOT_TOKEN != 'true'
+        run: echo "::warning::BOT_TOKEN secret not set. Skipping Renovate run."
+
+      - name: Checkout repository
+        if: env.HAS_BOT_TOKEN == 'true'
+        uses: actions/checkout@v7
+
+      - name: Resolve custom bot git identity
+        if: env.HAS_BOT_TOKEN == 'true'
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          bot_json=$(GH_TOKEN="$BOT_TOKEN" gh api user)
+          bot_id=$(jq -r '.id' <<<"$bot_json")
+          bot_login=$(jq -r '.login' <<<"$bot_json")
+          bot_name=$(jq -r '.name // .login' <<<"$bot_json")
+          {
+            echo "RENOVATE_GIT_AUTHOR=$bot_name <${bot_id}+${bot_login}@users.noreply.github.com>"
+            echo "RENOVATE_USERNAME=$bot_login"
+            echo "RENOVATE_REPOSITORIES=${{ github.repository }}"
+            echo "RENOVATE_PLATFORM=github"
+            echo "RENOVATE_ONBOARDING=false"
+            echo "RENOVATE_REQUIRE_CONFIG=optional"
+          } >> "$GITHUB_ENV"
+
+      - name: Run Renovate
+        if: env.HAS_BOT_TOKEN == 'true'
+        uses: renovatebot/github-action@v46
+        with:
+          configurationFile: .github/renovate.json
+          token: ${{ secrets.BOT_TOKEN }}
+
+# ──────────────────────────────────────────────────────────────────────────
+#  Tanish Poddar
+#  Website   https://tanisheesh.in
+#  LinkedIn  https://linkedin.com/in/tanisheesh
+#  GitHub    https://github.com/tanisheesh
+#  Email     hi@tanisheesh.in
+# ──────────────────────────────────────────────────────────────────────────

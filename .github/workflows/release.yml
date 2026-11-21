@@ -1,0 +1,46 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  TANISH'S SETUP TOOLKIT · tanisheesh.in                              ║
+# ║  Tag-triggered GitHub Release notes.                                 ║
+# ║  Goes to: <repo>/.github/workflows/release.yml                       ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+#
+# Push a semver tag like `git tag v1.0.0 && git push origin v1.0.0`
+# to create a GitHub Release with auto-generated notes.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          extra=""
+          if [[ "$TAG" == *-* ]]; then
+            extra="--prerelease"
+          fi
+          gh release create "$TAG" --verify-tag --generate-notes $extra
+
+# ──────────────────────────────────────────────────────────────────────────
+#  Tanish Poddar
+#  Website   https://tanisheesh.in
+#  LinkedIn  https://linkedin.com/in/tanisheesh
+#  GitHub    https://github.com/tanisheesh
+#  Email     hi@tanisheesh.in
+# ──────────────────────────────────────────────────────────────────────────

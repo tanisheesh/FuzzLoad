@@ -2,6 +2,14 @@
 # ║  TANISH'S SETUP TOOLKIT · tanisheesh.in                              ║
 # ║  CI workflow. Goes to: <repo>/.github/workflows/ci.yml               ║
 # ╚══════════════════════════════════════════════════════════════════════╝
+#
+# Works as-is on single apps AND monorepos:
+#   CI_DIRS: "auto" (default) discovers root + subdirs with manifests
+#     (Node/Bun/pnpm, Python, Go, Flutter/Dart, or static HTML fallback).
+#   Override CI_DIRS (e.g. ". backend frontend") if needed.
+#
+# Keep workflow name `CI` and job name `ci` — dependency-auto-merge.yml
+# and branch rulesets depend on them.
 
 name: CI
 
@@ -19,64 +27,137 @@ permissions:
   contents: read
 
 env:
-  CI_DIRS: "proxy-go backend frontend"
+  CI_DIRS: "auto"
   NODE_DEFAULT_VERSION: "22"
   PYTHON_DEFAULT_VERSION: "3.12"
-  GO_DEFAULT_VERSION: "1.23"
+  RUN_E2E: "true"
   NEXT_PUBLIC_API_URL: "http://localhost:8000"
 
 jobs:
   ci:
     name: ci
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
 
       - name: Detect stacks
         id: detect
         run: |
-          node=false; bun=false; pnpm=false; python=false; golang=false
-          for d in $CI_DIRS; do
-            [ -f "$d/package.json" ] && node=true
+          set -euo pipefail
+          node=false; bun=false; pnpm=false; pnpm_pkg_mgr=false
+          python=false; go=false; flutter=false; e2e=false
+          go_mod_file=""
+          node_version="$NODE_DEFAULT_VERSION"
+          python_version="$PYTHON_DEFAULT_VERSION"
+
+          if [ "$CI_DIRS" = "auto" ]; then
+            has_root_workspaces=false
+            if [ -f package.json ] && node -e 'process.exit(Array.isArray(require("./package.json").workspaces) || (require("./package.json").workspaces && typeof require("./package.json").workspaces === "object") ? 0 : 1)' 2>/dev/null; then
+              has_root_workspaces=true
+            fi
+
+            mapfile -t found_dirs < <(
+              find . -maxdepth 3 \
+                \( -name node_modules -o -name .git -o -name .venv -o -name venv -o -name dist -o -name .next -o -name build -o -name out -o -name coverage -o -name .dart_tool -o -name android -o -name ios -o -name macos -o -name windows -o -name linux -o -name examples \) -prune \
+                -o -type f \( -name package.json -o -name pyproject.toml -o -name requirements.txt -o -name setup.py -o -name go.mod -o -name pubspec.yaml \) -print0 \
+              | xargs -r -0 -n1 dirname | sort -u
+            )
+
+            resolved_arr=()
+            for d in "${found_dirs[@]}"; do
+              if [ "$d" != "." ] && [ "$has_root_workspaces" = true ] && [ -f "$d/package.json" ]; then
+                # Skip workspace child if it has no independent lockfile or non-Node manifest
+                if [ ! -f "$d/pnpm-lock.yaml" ] && [ ! -f "$d/package-lock.json" ] && [ ! -f "$d/yarn.lock" ] && [ ! -f "$d/bun.lock" ] && [ ! -f "$d/bun.lockb" ] && [ ! -f "$d/pyproject.toml" ] && [ ! -f "$d/requirements.txt" ] && [ ! -f "$d/go.mod" ] && [ ! -f "$d/pubspec.yaml" ]; then
+                  continue
+                fi
+              fi
+              resolved_arr+=("$d")
+            done
+            if [ "${#resolved_arr[@]}" -eq 0 ]; then
+              resolved_dirs="."
+            else
+              resolved_dirs="${resolved_arr[*]}"
+            fi
+          else
+            resolved_dirs="$CI_DIRS"
+          fi
+
+          for d in $resolved_dirs; do
+            [ -d "$d" ] || { echo "::error::CI_DIRS entry '$d' does not exist."; exit 1; }
+            if [ -f "$d/package.json" ]; then
+              node=true
+              if node -e 'const p=require(process.argv[1]); process.exit(typeof p.packageManager==="string" && p.packageManager.startsWith("pnpm@") ? 0 : 1)' "$d/package.json" 2>/dev/null; then
+                pnpm_pkg_mgr=true
+              fi
+            fi
             { [ -f "$d/bun.lockb" ] || [ -f "$d/bun.lock" ]; } && bun=true
             [ -f "$d/pnpm-lock.yaml" ] && pnpm=true
             { [ -f "$d/pyproject.toml" ] || [ -f "$d/requirements.txt" ] || [ -f "$d/setup.py" ]; } && python=true
-            [ -f "$d/go.mod" ] && golang=true
+            if [ -f "$d/go.mod" ]; then
+              go=true
+              [ -z "$go_mod_file" ] && go_mod_file="$d/go.mod"
+            fi
+            [ -f "$d/pubspec.yaml" ] && flutter=true
+            for cfg in playwright.config.ts playwright.config.js playwright.config.mjs playwright.config.mts; do
+              [ -f "$d/$cfg" ] && e2e=true
+            done
+            for f in "$d/.nvmrc" "$d/.node-version"; do
+              [ -f "$f" ] && node_version="$(tr -d 'v \r\n' < "$f")"
+            done
+            [ -f "$d/.python-version" ] && python_version="$(tr -d ' \r\n' < "$d/.python-version")"
           done
-          node_version="$NODE_DEFAULT_VERSION"
-          for f in .nvmrc .node-version; do [ -f "$f" ] && node_version="$(tr -d 'v \n' < "$f")"; done
-          python_version="$PYTHON_DEFAULT_VERSION"
-          [ -f .python-version ] && python_version="$(tr -d ' \n' < .python-version)"
+
           {
-            echo "node=$node"; echo "bun=$bun"; echo "pnpm=$pnpm"; echo "python=$python"; echo "golang=$golang"
+            echo "resolved_dirs=$resolved_dirs"
+            echo "node=$node"; echo "bun=$bun"; echo "pnpm=$pnpm"; echo "pnpm_pkg_mgr=$pnpm_pkg_mgr"
+            echo "python=$python"; echo "go=$go"; echo "go_mod_file=$go_mod_file"; echo "flutter=$flutter"; echo "e2e=$e2e"
             echo "node_version=$node_version"; echo "python_version=$python_version"
           } >> "$GITHUB_OUTPUT"
-          echo "Detected → golang=$golang python=$python node=$node pnpm=$pnpm"
-
-      - if: steps.detect.outputs.golang == 'true'
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_DEFAULT_VERSION }}
-          cache: false
+          echo "Detected dirs=[$resolved_dirs] → node=$node bun=$bun pnpm=$pnpm python=$python go=$go flutter=$flutter e2e=$e2e"
 
       - if: steps.detect.outputs.node == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: ${{ steps.detect.outputs.node_version }}
 
+      - if: steps.detect.outputs.pnpm == 'true' && steps.detect.outputs.pnpm_pkg_mgr == 'true'
+        uses: pnpm/action-setup@v6
+        with:
+          cache: true
+          cache_dependency_path: "**/pnpm-lock.yaml"
+
+      - if: steps.detect.outputs.pnpm == 'true' && steps.detect.outputs.pnpm_pkg_mgr != 'true'
+        uses: pnpm/action-setup@v6
+        with:
+          version: "10"
+          cache: true
+          cache_dependency_path: "**/pnpm-lock.yaml"
+
       - if: steps.detect.outputs.bun == 'true'
         uses: oven-sh/setup-bun@v2
-
-      - if: steps.detect.outputs.pnpm == 'true'
-        run: corepack enable
 
       - if: steps.detect.outputs.python == 'true'
         uses: actions/setup-python@v7
         with:
           python-version: ${{ steps.detect.outputs.python_version }}
 
+      - if: steps.detect.outputs.go == 'true'
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: ${{ steps.detect.outputs.go_mod_file }}
+          cache: false
+
+      - if: steps.detect.outputs.flutter == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          pub-cache: true
+
       - name: Install, lint, typecheck, build, test
+        env:
+          RESOLVED_DIRS: ${{ steps.detect.outputs.resolved_dirs }}
         run: |
           set -euo pipefail
 
@@ -87,21 +168,6 @@ jobs:
             ' "$1"
           }
 
-          run_go() {
-            echo "::group::go vet"
-            go vet ./...
-            echo "::endgroup::"
-            echo "::group::go test -race"
-            go test -v -race ./...
-            echo "::endgroup::"
-            echo "::group::go bench"
-            go test -run=^$ -bench=. -benchmem ./pkg/fuzzload
-            echo "::endgroup::"
-            echo "::group::go build"
-            go build -o /tmp/fuzzload-proxy ./cmd/fuzzload-proxy
-            echo "::endgroup::"
-          }
-
           run_node() {
             if   [ -f bun.lockb ] || [ -f bun.lock ]; then pm=bun;  bun install --frozen-lockfile
             elif [ -f pnpm-lock.yaml ];               then pm=pnpm; pnpm install --frozen-lockfile
@@ -109,42 +175,131 @@ jobs:
             elif [ -f package-lock.json ];            then pm=npm;  npm ci
             else                                           pm=npm;  npm install
             fi
-            for s in lint typecheck type-check build test; do
+
+            for s in lint format:check typecheck type-check build test; do
               if has_script "$s"; then
                 echo "::group::$pm run $s"; $pm run "$s"; echo "::endgroup::"
               fi
             done
+
+            if [ "$RUN_E2E" = "true" ]; then
+              for cfg in playwright.config.ts playwright.config.js playwright.config.mjs playwright.config.mts; do
+                if [ -f "$cfg" ]; then
+                  echo "::group::Playwright E2E ($cfg)"
+                  npx playwright install --with-deps
+                  if has_script "test:e2e"; then
+                    $pm run test:e2e
+                  else
+                    npx playwright test
+                  fi
+                  echo "::endgroup::"
+                  break
+                fi
+              done
+            fi
           }
 
           run_python() {
             PY=""
             python -m pip install --upgrade pip
-            if   [ -f uv.lock ];           then pip install uv && uv sync --all-extras && PY="uv run"
-            elif [ -f pyproject.toml ];    then pip install -e ".[dev]" || pip install -e .
-            elif [ -f requirements.txt ];  then pip install -r requirements.txt
+            if [ -f uv.lock ]; then
+              pip install uv
+              uv sync --all-extras
+              PY="uv run --no-sync"
+              if [ -f requirements-dev.txt ]; then uv pip install -r requirements-dev.txt; fi
+            else
+              if [ -f pyproject.toml ]; then
+                pip install -e ".[dev]" || pip install -e .
+              elif [ -f requirements.txt ]; then
+                pip install -r requirements.txt
+              fi
+              if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
             fi
-            if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
             echo "::group::compile check"
-            python -m compileall -q -x '(\.venv|venv|node_modules|\.git)/' .
+            $PY python -m compileall -q -x '(\.venv|venv|node_modules|\.git)/' .
             echo "::endgroup::"
-            if [ -f ruff.toml ] || [ -f .ruff.toml ] || grep -qs '\[tool.ruff' pyproject.toml; then
-              echo "::group::ruff"; pip install ruff; ruff check .; echo "::endgroup::"
+
+            run_py_tool() {
+              tool="$1"; shift
+              if [ -n "$PY" ]; then
+                $PY "$tool" --version >/dev/null 2>&1 || uv pip install "$tool"
+                $PY "$tool" "$@"
+              else
+                command -v "$tool" >/dev/null 2>&1 || pip install "$tool"
+                "$tool" "$@"
+              fi
+            }
+
+            if [ -f ruff.toml ] || [ -f .ruff.toml ] || { [ -f pyproject.toml ] && grep -qs '\[tool\.ruff' pyproject.toml; }; then
+              echo "::group::ruff"; run_py_tool ruff check .; echo "::endgroup::"
             fi
-            if [ -d tests ] || ls test_*.py */test_*.py >/dev/null 2>&1; then
-              echo "::group::pytest"; pip install pytest; $PY python -m pytest -q; echo "::endgroup::"
+
+            if [ -f pyproject.toml ] && grep -qs '\[tool\.mypy' pyproject.toml; then
+              echo "::group::mypy"; run_py_tool mypy .; echo "::endgroup::"
+            fi
+
+            if [ -d tests ] || [ -n "$(find . -maxdepth 3 -name 'test_*.py' -not -path './.venv/*' -not -path './venv/*' -print -quit)" ]; then
+              echo "::group::pytest"
+              if [ -n "$PY" ]; then
+                $PY python -m pytest --version >/dev/null 2>&1 || uv pip install pytest
+                $PY python -m pytest -q
+              else
+                python -m pytest --version >/dev/null 2>&1 || pip install pytest
+                python -m pytest -q
+              fi
+              echo "::endgroup::"
             fi
           }
 
-          for d in $CI_DIRS; do
+          run_go() {
+            echo "::group::go vet / test / build"
+            go vet ./...
+            go test -race ./...
+            go build ./...
+            echo "::endgroup::"
+          }
+
+          run_flutter() {
+            echo "::group::flutter pub get / analyze / test"
+            flutter pub get
+            flutter analyze
+            if [ -d test ]; then
+              flutter test
+            fi
+            echo "::endgroup::"
+          }
+
+          any_ran=false
+          for d in $RESOLVED_DIRS; do
             echo "━━━ $d ━━━"
             ( cd "$d"
               ran=false
-              if [ -f go.mod ]; then run_go; ran=true; fi
               if [ -f package.json ]; then run_node; ran=true; fi
               if [ -f pyproject.toml ] || [ -f requirements.txt ] || [ -f setup.py ]; then run_python; ran=true; fi
-              if [ "$ran" = false ]; then echo "No Go, Node, or Python project found in '$d', skipping."; fi
+              if [ -f go.mod ]; then run_go; ran=true; fi
+              if [ -f pubspec.yaml ]; then run_flutter; ran=true; fi
+              if [ "$ran" = false ]; then
+                if [ -f index.html ]; then
+                  [ -s index.html ] || { echo "::error::index.html is empty"; exit 1; }
+                  echo "Static HTML project verified (index.html non-empty)."
+                else
+                  echo "No supported manifest found in '$d', skipping."
+                fi
+              fi
             )
+            any_ran=true
           done
+          [ "$any_ran" = true ]
+
+      - name: Upload Playwright report on failure
+        if: failure() && steps.detect.outputs.e2e == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: "**/playwright-report/"
+          if-no-files-found: ignore
+          retention-days: 7
 
 # ──────────────────────────────────────────────────────────────────────────
 #  Tanish Poddar

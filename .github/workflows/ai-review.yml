@@ -1,0 +1,166 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  TANISH'S SETUP TOOLKIT · tanisheesh.in                              ║
+# ║  Optional BYOK AI PR review aligned to AGENTS.md.                    ║
+# ║  Goes to: <repo>/.github/workflows/ai-review.yml                     ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+#
+# CodeRabbit (.coderabbit.yaml) is the default zero-config reviewer for
+# public repos. To also enable this Actions-based reviewer (e.g. on private
+# repos), set repo variable ENABLE_AI_REVIEW=true and add one secret:
+#   GEMINI_API_KEY  |  ANTHROPIC_API_KEY  |  OPENAI_API_KEY
+
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number to review"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    if: >-
+      (github.event_name == 'workflow_dispatch' || vars.ENABLE_AI_REVIEW == 'true') &&
+      github.event.pull_request.draft != true &&
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'app/dependabot' &&
+      (vars.BOT_USERNAME == '' || github.actor != vars.BOT_USERNAME) &&
+      (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Run AI review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GEMINI_API_KEY" ] && [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$OPENAI_API_KEY" ]; then
+            echo "::notice::No AI API key secret configured. Skipping AI PR review."
+            exit 0
+          fi
+
+          gh pr diff "$PR_NUMBER" -R "$REPO" > pr.diff || true
+          node <<'EOF'
+          const fs = require('node:fs');
+
+          const agents = fs.existsSync('AGENTS.md')
+            ? fs.readFileSync('AGENTS.md', 'utf8').slice(0, 8000)
+            : 'Check code quality, security, UI anti-slop, reusability, and missing tests.';
+
+          const rawDiff = fs.existsSync('pr.diff') ? fs.readFileSync('pr.diff', 'utf8') : '';
+          if (!rawDiff.trim()) {
+            console.log('Empty diff, skipping.');
+            process.exit(0);
+          }
+
+          const diff = rawDiff.slice(0, 35000);
+          const prompt = [
+            'You are a strict senior engineer reviewing a GitHub PR.',
+            'Review ONLY concrete issues in this diff against these project guidelines:',
+            '<AGENTS_MD>',
+            agents,
+            '</AGENTS_MD>',
+            '',
+            'Focus on: (1) security bugs / missing validation / IDOR / secret leaks,',
+            '(2) architecture / reusability / file size / type-safety,',
+            '(3) UI anti-slop & missing 4 UI states / accessibility,',
+            '(4) missing unit/integration/E2E tests or error handling gaps.',
+            'Be concise, cite file paths and line changes, and skip praise.',
+            'If nothing actionable is found, say "LGTM — no blocking findings."',
+            '',
+            '<PR_DIFF>',
+            diff,
+            '</PR_DIFF>',
+          ].join('\n');
+
+          async function callModel() {
+            if (process.env.ANTHROPIC_API_KEY) {
+              const res = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                  'x-api-key': process.env.ANTHROPIC_API_KEY,
+                  'anthropic-version': '2023-06-01',
+                  'content-type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'claude-sonnet-4-5',
+                  max_tokens: 1500,
+                  messages: [{ role: 'user', content: prompt }],
+                }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(JSON.stringify(data));
+              return data.content?.[0]?.text || '';
+            }
+            if (process.env.OPENAI_API_KEY) {
+              const res = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                  'content-type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'gpt-4.1-mini',
+                  max_tokens: 1500,
+                  messages: [{ role: 'user', content: prompt }],
+                }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(JSON.stringify(data));
+              return data.choices?.[0]?.message?.content || '';
+            }
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { maxOutputTokens: 1500 },
+              }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(JSON.stringify(data));
+            return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          }
+
+          callModel()
+            .then((text) => {
+              fs.writeFileSync('review.md', `## 🤖 Automated AI Review\n\n${text.trim()}\n`);
+            })
+            .catch((err) => {
+              console.error('AI review call failed:', err.message);
+              process.exit(0);
+            });
+          EOF
+
+          if [ -s review.md ]; then
+            cat review.md >> "$GITHUB_STEP_SUMMARY"
+            gh pr comment "$PR_NUMBER" -R "$REPO" --body-file review.md
+          fi
+
+# ──────────────────────────────────────────────────────────────────────────
+#  Tanish Poddar
+#  Website   https://tanisheesh.in
+#  LinkedIn  https://linkedin.com/in/tanisheesh
+#  GitHub    https://github.com/tanisheesh
+#  Email     hi@tanisheesh.in
+# ──────────────────────────────────────────────────────────────────────────

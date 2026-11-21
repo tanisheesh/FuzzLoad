@@ -1,10 +1,18 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║  TANISH'S SETUP TOOLKIT · tanisheesh.in                              ║
-# ║  Auto-merge Dependabot PRs once CI is green.                         ║
-# ║  Goes to: <repo>/.github/workflows/dependabot-auto-merge.yml         ║
+# ║  Auto-merge dependency PRs once CI is green.                         ║
+# ║  Goes to: <repo>/.github/workflows/dependency-auto-merge.yml         ║
 # ╚══════════════════════════════════════════════════════════════════════╝
+#
+# Flow: Renovate opens a PR (via BOT_TOKEN) → CI runs → when CI finishes,
+# this workflow checks the PR was opened by BOT_USERNAME (or Dependabot) and
+# that CI passed, then squash-merges it using BOT_TOKEN so commit authorship
+# and Contributors credit stay on your custom bot account.
+#
+# AUTO_MERGE_MAJOR: "true"  → merge every update that passes CI (default)
+#                   "false" → only auto-merge minor/patch; majors wait for you
 
-name: Dependabot auto-merge
+name: Dependency auto-merge
 
 on:
   workflow_run:
@@ -22,12 +30,14 @@ jobs:
   merge:
     if: >-
       github.event.workflow_run.event == 'pull_request' &&
-      startsWith(github.event.workflow_run.head_branch, 'dependabot/')
+      (startsWith(github.event.workflow_run.head_branch, 'renovate/') ||
+       startsWith(github.event.workflow_run.head_branch, 'dependabot/'))
     runs-on: ubuntu-latest
     steps:
       - name: Merge or flag the PR
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.BOT_TOKEN || github.token }}
+          BOT_USERNAME: ${{ vars.BOT_USERNAME }}
           REPO: ${{ github.repository }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
           CONCLUSION: ${{ github.event.workflow_run.conclusion }}
@@ -38,15 +48,22 @@ jobs:
 
           pr=$(gh pr list -R "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
           if [ -z "$pr" ]; then echo "No open PR for $BRANCH, nothing to do."; exit 0; fi
+
           author=$(gh pr view "$pr" -R "$REPO" --json author --jq .author.login)
-          if [ "$author" != "app/dependabot" ] && [ "$author" != "dependabot[bot]" ] && [ "$author" != "dependabot" ]; then
-            echo "PR #$pr is by $author, not Dependabot. Skipping."; exit 0
+          is_bot=false
+          if [ -n "${BOT_USERNAME:-}" ] && [ "$author" = "$BOT_USERNAME" ]; then is_bot=true; fi
+          if [ "$author" = "app/dependabot" ] || [ "$author" = "dependabot[bot]" ] || [ "$author" = "dependabot" ]; then is_bot=true; fi
+          if [ "$is_bot" != true ]; then
+            echo "PR #$pr is by $author, not the configured dependency bot. Skipping."
+            exit 0
           fi
-          title=$(gh pr view "$pr" -R "$REPO" --json title --jq .title)
+
+          pr_json=$(gh pr view "$pr" -R "$REPO" --json title,labels)
+          title=$(jq -r '.title' <<<"$pr_json")
           echo "PR #$pr: $title (CI: $CONCLUSION)"
 
           gh label create needs-review -R "$REPO" --color D93F0B \
-            --description "Dependency update that needs a manual look" 2>/dev/null || true
+            --description "Needs manual review" 2>/dev/null || true
 
           if [ "$CONCLUSION" != "success" ]; then
             gh pr edit "$pr" -R "$REPO" --add-label needs-review
@@ -54,12 +71,12 @@ jobs:
             exit 0
           fi
 
-          is_major=false
-          if [[ "$title" =~ from[[:space:]]+v?([0-9]+)[^[:space:]]*[[:space:]]+to[[:space:]]+v?([0-9]+) ]]; then
+          is_major=$(jq -r 'any(.labels[]; .name == "major")' <<<"$pr_json")
+          if [ "$is_major" != "true" ] && [[ "$title" =~ from[[:space:]]+v?([0-9]+)[^[:space:]]*[[:space:]]+to[[:space:]]+v?([0-9]+) ]]; then
             [ "${BASH_REMATCH[1]}" != "${BASH_REMATCH[2]}" ] && is_major=true
           fi
 
-          if [ "$is_major" = true ] && [ "$AUTO_MERGE_MAJOR" != "true" ]; then
+          if [ "$is_major" = "true" ] && [ "$AUTO_MERGE_MAJOR" != "true" ]; then
             gh pr edit "$pr" -R "$REPO" --add-label needs-review
             gh pr comment "$pr" -R "$REPO" --body "🚨 Major version update. CI passed, but it's waiting for a manual review (AUTO_MERGE_MAJOR is off)."
             exit 0

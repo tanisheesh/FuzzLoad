@@ -1,0 +1,38 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":disableDependencyDashboard"
+  ],
+  "timezone": "Asia/Kolkata",
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 10,
+  "minimumReleaseAge": "3 days",
+  "osvVulnerabilityAlerts": true,
+  "commitMessagePrefix": "👆",
+  "vulnerabilityAlerts": {
+    "labels": ["dependencies", "security"],
+    "commitMessagePrefix": "🔒"
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["github-actions"],
+      "commitMessagePrefix": "👷",
+      "addLabels": ["ci"]
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "github-actions (minor & patch)"
+    },
+    {
+      "matchManagers": ["!github-actions"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "dependencies (minor & patch)"
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "addLabels": ["major"]
+    }
+  ]
+}
