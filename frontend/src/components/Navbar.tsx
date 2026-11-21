@@ -67,7 +67,7 @@ export default function Navbar() {
                     : "text-[#88857e] hover:text-[#f2efe9] hover:bg-[#0e0e0e]"
                 }`}
               >
-                <span className="text-[10px] text-[#4a4843]">[{item.code}]</span>
+                <span className="text-[10px] text-[#9c9990]">[{item.code}]</span>
                 <span>{item.label}</span>
               </Link>
             );

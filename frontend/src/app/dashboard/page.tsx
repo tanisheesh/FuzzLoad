@@ -25,7 +25,7 @@ import {
   stepClientSimulation,
 } from "@/lib/fuzzload-engine";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "").trim();
 
 const ALGORITHMS = [
   { id: "fuzzload", label: "FUZZLOAD (GP + ANFIS)" },
@@ -75,19 +75,21 @@ export default function LiveDemoDashboardPage() {
 
   const pollClusterState = useCallback(async () => {
     if (isPaused) return;
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 650);
-      const res = await fetch(`${API_BASE}/api/state`, { signal: controller.signal });
-      clearTimeout(timeout);
-      if (res.ok) {
-        const data: FuzzLoadClusterState = await res.json();
-        setState(data);
-        setBackendLive(true);
-        return;
+    if (API_BASE) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 650);
+        const res = await fetch(`${API_BASE}/api/state`, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (res.ok) {
+          const data: FuzzLoadClusterState = await res.json();
+          setState(data);
+          setBackendLive(true);
+          return;
+        }
+      } catch {
+        setBackendLive(false);
       }
-    } catch {
-      setBackendLive(false);
     }
     setState((prev) => stepClientSimulation(prev));
   }, [isPaused]);
@@ -743,12 +745,12 @@ export default function LiveDemoDashboardPage() {
             </div>
 
             <div className="p-3.5 sm:p-5 space-y-4">
-              <div className="p-3 border border-[#222220] bg-[#080808] font-mono text-[11px] sm:text-xs text-[#00e676] overflow-x-auto custom-scrollbar whitespace-nowrap">
+              <div tabIndex={0} className="p-3 border border-[#222220] bg-[#080808] font-mono text-[11px] sm:text-xs text-[#00e676] overflow-x-auto custom-scrollbar whitespace-nowrap">
                 <span className="text-[#88857e]">Φ_GP(x) = </span>
                 {state.gp.best_formula}
               </div>
 
-              <div className="py-5 px-3 border border-[#222220] bg-[#0b0b0b] overflow-x-auto custom-scrollbar flex justify-start sm:justify-center">
+              <div tabIndex={0} className="py-5 px-3 border border-[#222220] bg-[#0b0b0b] overflow-x-auto custom-scrollbar flex justify-start sm:justify-center">
                 <ASTTreeVisualizer node={state.gp.ast_tree} />
               </div>
             </div>
@@ -791,7 +793,7 @@ export default function LiveDemoDashboardPage() {
               </ResponsiveContainer>
             </div>
 
-            <div className="p-3.5 sm:p-4 border-t border-[#222220] overflow-x-auto custom-scrollbar">
+            <div tabIndex={0} className="p-3.5 sm:p-4 border-t border-[#222220] overflow-x-auto custom-scrollbar">
               <table className="w-full min-w-[300px] text-left font-mono text-[11px] sm:text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-[#222220] text-[#88857e] text-[10px]">

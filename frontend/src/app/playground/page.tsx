@@ -208,7 +208,7 @@ export default function ProxyPlaygroundPage() {
 
   const dockerSnippet = `services:\n  fuzzload-gateway:\n    image: ghcr.io/tanisheesh/fuzzload:latest\n    ports:\n      - "8080:8080"\n      - "8000:8000"\n    environment:\n      - POLICY=fuzzload\n      - UPSTREAMS=${upstreams.map((u) => u.url).join(",")}`;
 
-  const goSnippet = `// go get github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload@v1.0.0\npackage main\n\nimport (\n\t"context"\n\t"net/http"\n\t"github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload"\n)\n\nfunc main() {\n\tproxy, _ := fuzzload.NewProxy(fuzzload.Config{\n\t\tAlgorithm: fuzzload.AlgoFuzzLoad,\n\t\tUpstreams: []fuzzload.UpstreamSpec{\n${upstreams
+  const goSnippet = `// go get github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload@v1.0.1\npackage main\n\nimport (\n\t"context"\n\t"net/http"\n\t"github.com/tanisheesh/FuzzLoad/proxy-go/pkg/fuzzload"\n)\n\nfunc main() {\n\tproxy, _ := fuzzload.NewProxy(fuzzload.Config{\n\t\tAlgorithm: fuzzload.AlgoFuzzLoad,\n\t\tUpstreams: []fuzzload.UpstreamSpec{\n${upstreams
     .map(
       (u) =>
         `\t\t\t{ID: "${u.id}", URL: "${u.url}", CapacityCores: ${u.cores}, InitialWeight: ${(u.assignedWeightPct / 100).toFixed(2)}},`
@@ -448,7 +448,7 @@ export default function ProxyPlaygroundPage() {
                 ))}
               </div>
               <div className="p-3.5 sm:p-4">
-                <pre className="p-3 bg-[#080808] border border-[#222220] font-mono text-[11px] sm:text-xs text-[#00e676] overflow-x-auto custom-scrollbar leading-relaxed max-h-64">
+                <pre tabIndex={0} className="p-3 bg-[#080808] border border-[#222220] font-mono text-[11px] sm:text-xs text-[#00e676] overflow-x-auto custom-scrollbar leading-relaxed max-h-64">
                   {activeConfigText}
                 </pre>
               </div>
