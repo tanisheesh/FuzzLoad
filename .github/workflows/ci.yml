@@ -45,18 +45,13 @@ jobs:
         id: detect
         run: |
           set -euo pipefail
-          node=false; bun=false; pnpm=false; pnpm_pkg_mgr=false
+          node=false; bun=false; pnpm=false; pnpm_version=""
           python=false; go=false; flutter=false; e2e=false
           go_mod_file=""
           node_version="$NODE_DEFAULT_VERSION"
           python_version="$PYTHON_DEFAULT_VERSION"
 
           if [ "$CI_DIRS" = "auto" ]; then
-            has_root_workspaces=false
-            if [ -f package.json ] && node -e 'process.exit(Array.isArray(require("./package.json").workspaces) || (require("./package.json").workspaces && typeof require("./package.json").workspaces === "object") ? 0 : 1)' 2>/dev/null; then
-              has_root_workspaces=true
-            fi
-
             mapfile -t found_dirs < <(
               find . -maxdepth 3 \
                 \( -name node_modules -o -name .git -o -name .venv -o -name venv -o -name dist -o -name .next -o -name build -o -name out -o -name coverage -o -name .dart_tool -o -name android -o -name ios -o -name macos -o -name windows -o -name linux -o -name examples \) -prune \
@@ -64,16 +59,7 @@ jobs:
               | xargs -r -0 -n1 dirname | sort -u
             )
 
-            resolved_arr=()
-            for d in "${found_dirs[@]}"; do
-              if [ "$d" != "." ] && [ "$has_root_workspaces" = true ] && [ -f "$d/package.json" ]; then
-                # Skip workspace child if it has no independent lockfile or non-Node manifest
-                if [ ! -f "$d/pnpm-lock.yaml" ] && [ ! -f "$d/package-lock.json" ] && [ ! -f "$d/yarn.lock" ] && [ ! -f "$d/bun.lock" ] && [ ! -f "$d/bun.lockb" ] && [ ! -f "$d/pyproject.toml" ] && [ ! -f "$d/requirements.txt" ] && [ ! -f "$d/go.mod" ] && [ ! -f "$d/pubspec.yaml" ]; then
-                  continue
-                fi
-              fi
-              resolved_arr+=("$d")
-            done
+            resolved_arr=("${found_dirs[@]}")
             if [ "${#resolved_arr[@]}" -eq 0 ]; then
               resolved_dirs="."
             else
@@ -87,8 +73,9 @@ jobs:
             [ -d "$d" ] || { echo "::error::CI_DIRS entry '$d' does not exist."; exit 1; }
             if [ -f "$d/package.json" ]; then
               node=true
-              if node -e 'const p=require(process.argv[1]); process.exit(typeof p.packageManager==="string" && p.packageManager.startsWith("pnpm@") ? 0 : 1)' "$d/package.json" 2>/dev/null; then
-                pnpm_pkg_mgr=true
+              detected_pm=$(node -e 'const p=require(process.argv[1]); if (typeof p.packageManager==="string" && p.packageManager.startsWith("pnpm@")) console.log(p.packageManager.slice(5));' "$d/package.json" 2>/dev/null || true)
+              if [ -n "$detected_pm" ] && [ -z "$pnpm_version" ]; then
+                pnpm_version="$detected_pm"
               fi
             fi
             { [ -f "$d/bun.lockb" ] || [ -f "$d/bun.lock" ]; } && bun=true
@@ -108,29 +95,27 @@ jobs:
             [ -f "$d/.python-version" ] && python_version="$(tr -d ' \r\n' < "$d/.python-version")"
           done
 
+          if [ "$pnpm" = "true" ] && [ -z "$pnpm_version" ]; then
+            pnpm_version="10"
+          fi
+
           {
             echo "resolved_dirs=$resolved_dirs"
-            echo "node=$node"; echo "bun=$bun"; echo "pnpm=$pnpm"; echo "pnpm_pkg_mgr=$pnpm_pkg_mgr"
+            echo "node=$node"; echo "bun=$bun"; echo "pnpm=$pnpm"; echo "pnpm_version=$pnpm_version"
             echo "python=$python"; echo "go=$go"; echo "go_mod_file=$go_mod_file"; echo "flutter=$flutter"; echo "e2e=$e2e"
             echo "node_version=$node_version"; echo "python_version=$python_version"
           } >> "$GITHUB_OUTPUT"
-          echo "Detected dirs=[$resolved_dirs] → node=$node bun=$bun pnpm=$pnpm python=$python go=$go flutter=$flutter e2e=$e2e"
+          echo "Detected dirs=[$resolved_dirs] → node=$node bun=$bun pnpm=$pnpm(v=$pnpm_version) python=$python go=$go flutter=$flutter e2e=$e2e"
 
       - if: steps.detect.outputs.node == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: ${{ steps.detect.outputs.node_version }}
 
-      - if: steps.detect.outputs.pnpm == 'true' && steps.detect.outputs.pnpm_pkg_mgr == 'true'
+      - if: steps.detect.outputs.pnpm == 'true'
         uses: pnpm/action-setup@v6
         with:
-          cache: true
-          cache_dependency_path: "**/pnpm-lock.yaml"
-
-      - if: steps.detect.outputs.pnpm == 'true' && steps.detect.outputs.pnpm_pkg_mgr != 'true'
-        uses: pnpm/action-setup@v6
-        with:
-          version: "10"
+          version: ${{ steps.detect.outputs.pnpm_version }}
           cache: true
           cache_dependency_path: "**/pnpm-lock.yaml"
 
